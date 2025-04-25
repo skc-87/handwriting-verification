@@ -1,99 +1,112 @@
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import { useEffect, useState } from "react";
-
 import axios from "axios";
 import CompareHandwriting from "../components/CompareHandwriting";
 
 const UploadFile = () => {
   const [file, setFile] = useState(null);
-  const [fileCategory, setFileCategory] = useState("handwriting_sample");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [successMessage, setSuccessMessage] = useState("");
-  const [fetchedFiles, setFetchedFiles] = useState([]);
   const [studentId, setStudentId] = useState("");
-  const [fetchStatus, setFetchStatus] = useState("");
+  const [assignments, setAssignments] = useState([]);
+  const [isFetching, setIsFetching] = useState(false);
 
-  // 🧠 Fetch button handler (calls Python model via local server or subprocess later)
-  const handleFetchFile = async () => {
-    setFetchStatus("Fetching...");
-    const token = sessionStorage.getItem("authToken");
+  const userName = sessionStorage.getItem("userName");
 
+  // Fetch assignments for the student
+  const fetchAssignments = async () => {
+    setIsFetching(true);
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/model/fetch-file-path",
+      const token = sessionStorage.getItem("authToken");
+      const response = await axios.get(
+        `http://localhost:5000/api/files/student-assignments/${studentId}`,
         {
-          method: "POST",
           headers: {
-            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            student_id: studentId,
-            fileCategory,
-          }),
         }
       );
-
-      const data = await response.json();
-      if (response.ok) {
-        if (data.files && data.files.length > 0) {
-          setFetchedFiles(data.files); // Save array of fetched file paths
-          setFetchStatus(
-            "✅ File fetched successfully! "
-          );
-        } else {
-          setFetchStatus("⚠️ No files found.");
-        }
+      setAssignments(response.data);
+      if (response.data.length > 0) {
+        toast.success(`Found ${response.data.length} assignments`, {
+          autoClose: 2000,
+        });
       } else {
-        setFetchStatus("❌ " + data.message);
+        toast.info("No assignments found", { autoClose: 2000 });
       }
-    } catch (err) {
-      setFetchStatus("❌ Server error while fetching file.");
-      console.error(err);
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message || "Failed to fetch assignments";
+      toast.error(errorMsg);
+      console.error(error);
+    } finally {
+      setIsFetching(false);
     }
   };
 
   const handleUpload = async () => {
     if (!file) {
-      setError("Please select a file before uploading.");
+      toast.error("Please select a file before uploading.", {
+        autoClose: 3000,
+      });
       return;
     }
 
     const token = sessionStorage.getItem("authToken");
     if (!token) {
-      setError("No authentication token found. Please log in.");
+      toast.error("No authentication token found. Please log in.", {
+        autoClose: 3000,
+      });
       return;
     }
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("fileCategory", fileCategory);
+    formData.append("fileCategory", "assignment");
+    formData.append("studentName", userName);
 
     setLoading(true);
-    setError(null);
-    setSuccessMessage("");
+    toast.info("Uploading your assignment...", { autoClose: false });
 
     try {
-      await axios.post(`http://localhost:5000/api/files/upload`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      const response = await axios.post(
+        `http://localhost:5000/api/files/upload`,
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
 
-      setSuccessMessage("File uploaded successfully!");
-      setFile(null); // Reset file input
+      toast.dismiss(); // Dismiss the uploading toast
+      toast.success("Assignment uploaded successfully!", {
+        render: () => (
+          <div>
+            <p className="font-semibold">Upload Successful!</p>
+            <p>{response.data?.file?.fileName} has been uploaded</p>
+          </div>
+        ),
+        autoClose: 3000,
+      });
+      setFile(null);
+      fetchAssignments();
     } catch (error) {
+      toast.dismiss(); // Dismiss the uploading toast
       if (error.response) {
         if (error.response.status === 401) {
-          setError("Session expired! Please log in again.");
+          toast.error("Session expired! Please log in again.", {
+            autoClose: 3000,
+          });
           sessionStorage.removeItem("authToken");
-          window.location.href = "/login"; // Redirect to login page
+          window.location.href = "/login";
         } else {
-          setError(error.response.data.message || "Upload failed!");
+          const errorMsg = error.response.data?.message || "Upload failed!";
+          toast.error(errorMsg, { autoClose: 3000 });
         }
       } else {
-        setError("An error occurred during the upload. Please try again.");
+        toast.error("Network error. Please try again.", { autoClose: 3000 });
       }
     } finally {
       setLoading(false);
@@ -102,133 +115,197 @@ const UploadFile = () => {
 
   useEffect(() => {
     const userData = sessionStorage.getItem("user");
-
-    // ✅ Check if userData exists and is not the string "undefined"
     if (userData && userData !== "undefined") {
       try {
         const parsed = JSON.parse(userData);
         if (parsed && parsed._id) {
           setStudentId(parsed._id);
-        } else {
-          console.warn("User data missing _id field:", parsed);
+          toast.success(`Welcome, ${parsed.name || userName}!`, {
+            autoClose: 3000,
+          });
         }
       } catch (e) {
-        console.error("❌ Invalid user data in sessionStorage:", e);
+        console.error("Invalid user data in sessionStorage:", e);
+        toast.error("Error loading user data", { autoClose: 2000 });
       }
     } else {
-      console.warn("⚠️ No valid user data found in sessionStorage.");
+      toast.warn("No user data found", { autoClose: 2000 });
     }
   }, []);
 
-  const handleDownload = (filePath) => {
-    const fileName = filePath.split("/").pop();
-    const downloadUrl = `http://localhost:5000/download/${fileName}`;
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  useEffect(() => {
+    if (studentId) {
+      fetchAssignments();
+    }
+  }, [studentId]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="bg-white p-8 rounded-lg shadow-lg w-96">
-        <h2 className="text-2xl font-semibold text-center mb-6">Upload File</h2>
+    <div className="min-h-screen bg-gray-100 p-6">
+      <div className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-lg">
+        <h2 className="text-2xl font-semibold text-center mb-6">
+          Student Dashboard
+        </h2>
 
-        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-        {successMessage && (
-          <p className="text-green-500 text-sm mb-4">{successMessage}</p>
-        )}
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Select File
-          </label>
-          <input
-            type="file"
-            onChange={(e) => setFile(e.target.files[0])}
-            className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Select File Type
-          </label>
-          <select
-            value={fileCategory}
-            onChange={(e) => setFileCategory(e.target.value)}
-            className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="handwriting_sample">Handwriting Sample</option>
-            <option value="assignment">Assignment</option>
-          </select>
-        </div>
-
-        <button
-          onClick={handleUpload}
-          className={`w-full py-2 text-white font-semibold rounded-md ${
-            loading
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700"
-          } transition duration-300`}
-          disabled={loading}
-        >
-          {loading ? "Uploading..." : "Upload"}
-        </button>
-
-        <hr className="my-6" />
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Student ID to Fetch File
-          </label>
-          <input
-            type="text"
-            placeholder="Enter Student ID"
-            value={studentId}
-            onChange={(e) => setStudentId(e.target.value)}
-            readOnly
-            className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-
-        <button
-          onClick={handleFetchFile}
-          className="w-full py-2 bg-purple-600 text-white font-semibold rounded-md hover:bg-purple-700 transition duration-300"
-        >
-          Fetch File for AI Model
-        </button>
-
-        {fetchStatus && <p className="text-sm mt-3">{fetchStatus}</p>}
-
-        {fetchedFiles.length > 0 && (
-          <div className="mt-4">
-            <h3 className="text-sm font-medium mb-2 text-gray-700">
-              Fetched Files:
-            </h3>
-            <ul className="space-y-2">
-              {fetchedFiles.map((filePath, index) => {
-                const fileName = filePath.split("/").pop();
-                return (
-                  <li
-                    key={index}
-                    className="flex justify-between items-center bg-gray-100 p-2 rounded-md"
-                  >
-                    <span className="text-sm truncate">{fileName}</span>
-                    <button
-                      onClick={() => handleDownload(filePath)}
-                      className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
-                    >
-                      Download
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+        {/* File Upload Section */}
+        <div className="mb-8 p-6 border rounded-lg">
+          <h3 className="text-xl font-medium mb-4 text-center">
+            Upload Assignment
+          </h3>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Select File
+            </label>
+            <input
+              type="file"
+              onChange={(e) => {
+                if (e.target.files[0]) {
+                  toast.info(`${e.target.files[0].name} selected`, {
+                    autoClose: 2000,
+                  });
+                  setFile(e.target.files[0]);
+                }
+              }}
+              className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-        )}
+          <button
+            onClick={handleUpload}
+            className={`w-full py-2 text-white font-semibold rounded-md flex justify-center items-center gap-2 ${
+              loading
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700"
+            }`}
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <svg
+                  className="animate-spin h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v8z"
+                  ></path>
+                </svg>
+                Uploading...
+              </>
+            ) : (
+              "Upload Assignment"
+            )}
+          </button>
+        </div>
+
+        {/* Assignments Table Section */}
+        <div className="mb-8">
+          <h3 className="text-xl font-medium mb-4">Your Assignments</h3>
+          {isFetching ? (
+            <div className="flex items-center justify-center p-4">
+              <span className="loading loading-spinner loading-lg text-blue-500"></span>
+              <span className="ml-2">Loading assignments...</span>
+            </div>
+          ) : assignments.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white border">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="py-2 px-4 border text-center">File Name</th>
+                    <th className="py-2 px-4 border text-center">
+                      Upload Date
+                    </th>
+                    <th className="py-2 px-4 border text-center">Status</th>
+                    <th className="py-2 px-4 border text-center">Marks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignments.map((assignment) => (
+                    <tr key={assignment._id} className="hover:bg-gray-50">
+                      <td className="py-2 px-4 border text-center">
+                        <span
+                          className="cursor-pointer hover:text-blue-600"
+                          onClick={() => {
+                            toast.info(`Assignment: ${assignment.fileName}`, {
+                              render: () => (
+                                <div>
+                                  <p className="font-semibold">
+                                    Assignment Details
+                                  </p>
+                                  <p>Name: {assignment.fileName}</p>
+                                  <p>
+                                    Uploaded:{" "}
+                                    {new Date(
+                                      assignment.uploadDate
+                                    ).toLocaleString()}
+                                  </p>
+                                  {assignment.marks && (
+                                    <p>Marks: {assignment.marks}</p>
+                                  )}
+                                </div>
+                              ),
+                              autoClose: 5000,
+                            });
+                          }}
+                        >
+                          {assignment.fileName}
+                        </span>
+                      </td>
+                      <td className="py-2 px-4 border text-center">
+                        {new Date(assignment.uploadDate).toLocaleDateString()}
+                      </td>
+                      <td className="py-2 px-4 border text-center">
+                        {assignment.marks ? (
+                          <span className="text-green-600 flex items-center justify-center">
+                            <svg
+                              className="w-4 h-4 mr-1"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            Checked
+                          </span>
+                        ) : (
+                          <span className="text-yellow-600">Pending</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-4 border text-center font-medium">
+                        {assignment.marks || (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center p-4 bg-gray-50 rounded-lg">
+              <p className="text-gray-500">No assignments submitted yet.</p>
+              <button
+                onClick={fetchAssignments}
+                className="mt-2 text-blue-600 hover:underline"
+              >
+                Refresh
+              </button>
+            </div>
+          )}
+        </div>
+
         {studentId && <CompareHandwriting studentId={studentId} />}
       </div>
     </div>

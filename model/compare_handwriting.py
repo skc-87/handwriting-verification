@@ -9,8 +9,11 @@ import torch
 import json
 import argparse
 import random
-from resnet_embedder import ResNetEmbedder
-from sklearn.metrics.pairwise import cosine_similarity as cos_sim
+from siamese_network import SiameseNetwork  # Custom Siamese model
+from torchvision import transforms
+# from resnet_embedder import ResNetEmbedder  # ❌ Commented: ResNet Embedder (not used)
+import torch.nn.functional as F
+from sklearn.metrics.pairwise import cosine_similarity
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -50,13 +53,44 @@ def find_file_with_prefix(folder, prefix, allowed_extensions):
     return None
 
 # -------------------------------
-# ✅ Compare two images using ResNet
+# ✅ Preprocess image for Siamese model
 # -------------------------------
-def compare_images(img1, img2, embedder):
-    emb1 = embedder.get_embedding_from_array(img1)
-    emb2 = embedder.get_embedding_from_array(img2)
-    similarity = cos_sim([emb1], [emb2])[0][0]
+def preprocess_image(img_array):
+    if len(img_array.shape) == 2:  # Grayscale image (H x W)
+        img_array = cv2.cvtColor(img_array, cv2.COLOR_GRAY2RGB)
+
+    transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),  # Converts to [0,1] and [C x H x W]
+    ])
+    tensor = transform(img_array)
+    return tensor.unsqueeze(0)  # Shape: [1, 3, 224, 224]
+
+
+# -------------------------------
+# ✅ Compare two images using Siamese model
+# -------------------------------
+def compare_images_siamese(img1, img2, model, device):
+    t1 = preprocess_image(img1).to(device)
+    t2 = preprocess_image(img2).to(device)
+
+    with torch.no_grad():
+        emb1 = model.forward_once(t1)
+        emb2 = model.forward_once(t2)
+        distance = F.pairwise_distance(emb1, emb2).item()
+        similarity = 1 / (1 + distance)
+
     return round(similarity * 100, 2)
+
+# -------------------------------
+# ❌ [Commented] Compare using ResNet Embedder
+# -------------------------------
+# def compare_images_resnet(img1, img2, embedder):
+#     emb1 = embedder.get_embedding_from_array(img1)
+#     emb2 = embedder.get_embedding_from_array(img2)
+#     similarity = cosine_similarity([emb1], [emb2])[0][0]
+#     return round(similarity * 100, 2)
 
 # -------------------------------
 # ✅ Main Function
@@ -81,47 +115,47 @@ def main(student_id):
         sys.stdout.flush()
         return
 
-    # Convert to image(s)
-    sample_img = convert_to_image(sample_path)[0]  # Only one image for sample
-    assignment_imgs = convert_to_image(assignment_path, num_pages=3)
+    sample_img = convert_to_image(sample_path)[0]
+    assignment_imgs = convert_to_image(assignment_path, num_pages=10)
 
     print(f"[✅ Python] Converted {len(assignment_imgs)} assignment pages to images", file=sys.stderr)
 
-    # Initialize embedder
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    embedder = ResNetEmbedder(device=device)
 
-    # Add array method to embedder
-    def get_embedding_from_array(self, img_array):
-        image = Image.fromarray(img_array).convert("RGB")
-        image_tensor = self.preprocess(image).unsqueeze(0).to(self.device)
-        with torch.no_grad():
-            features = self.feature_extractor(image_tensor)
-            features = features.view(features.size(0), -1)
-        return features.squeeze().cpu().numpy()
+    # ❌ Commented: Load ResNet Embedder
+    # embedder = ResNetEmbedder(device=device)
 
-    setattr(embedder, "get_embedding_from_array", get_embedding_from_array.__get__(embedder))
+    siamese_model_path = os.path.join(os.path.dirname(__file__), "siamese_model_contrastive.pth")
+    siamese_model = SiameseNetwork().to(device)
+    siamese_model.load_state_dict(torch.load(siamese_model_path, map_location=device))
+    siamese_model.eval()
 
-    similarities = []
-    failed_pages = []
+    # similarities_resnet = []  # ❌ Commented: ResNet
+    similarities_siamese = []
 
     for idx, assignment_img in enumerate(assignment_imgs):
-        sim = compare_images(sample_img, assignment_img, embedder)
-        similarities.append(sim)
-        print(f"[🔍 Page {idx+1}] Similarity: {sim}", file=sys.stderr)
-        if sim < 80:
-            failed_pages.append(idx + 1)
+        # sim_resnet = compare_images_resnet(sample_img, assignment_img, embedder)  # ❌ Commented
+        sim_siamese = compare_images_siamese(sample_img, assignment_img, siamese_model, device)
 
-    all_match = len(failed_pages) == 0
+        # similarities_resnet.append(sim_resnet)  # ❌
+        similarities_siamese.append(sim_siamese)
 
-    similarity_score = similarities[1] if len(similarities) >= 2 else similarities[0]
+        # print(f"[🔍 Page {idx+1}] ResNet Similarity: {sim_resnet}", file=sys.stderr)
+        print(f"[🔍 Page {idx+1}] Siamese Similarity: {sim_siamese}", file=sys.stderr)
+
+    # average_resnet_similarity = round(sum(similarities_resnet) / len(similarities_resnet), 2)  # ❌
+    average_siamese_similarity = round(sum(similarities_siamese) / len(similarities_siamese), 2)
+
+    # Strict condition: All individual similarities >= 70 AND average >= 70
+    matched = average_siamese_similarity >= 70 and all(score >= 70 for score in similarities_siamese)
 
     result = {
         "status": "success",
-        "similarity": similarity_score,
-        "similarities": similarities,
-        "matched": all_match,
-        "failed_pages": failed_pages
+        "siamese_similarity": average_siamese_similarity,
+        "matched": matched,
+        "siamese_similarities": similarities_siamese
+        # "resnet_similarity": average_resnet_similarity,  # ❌
+        # "resnet_similarities": similarities_resnet  # ❌
     }
 
     sys.stdout.write(json.dumps(result))

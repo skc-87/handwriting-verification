@@ -1,21 +1,32 @@
 import { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 
 const Signup = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("student");
-  const [successMessage, setSuccessMessage] = useState("");
-  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const toastConfig = {
+    position: "top-right",
+    autoClose: 2000,
+    hideProgressBar: false,
+    closeOnClick: true,
+    pauseOnHover: true,
+    draggable: true,
+  };
+
   const handleSignup = async () => {
+    if (!name || !email || !password) {
+      toast.error("Please fill in all fields", toastConfig);
+      return;
+    }
+
     setLoading(true);
-    setError(null);
-    setSuccessMessage("");
 
     try {
       await axios.post("http://localhost:5000/api/auth/register", {
@@ -25,21 +36,29 @@ const Signup = () => {
         role,
       });
 
-      setSuccessMessage("Signup successful! Please log in.");
+      toast.success("Signup successful! Redirecting to login...", toastConfig);
+
+      setTimeout(() => navigate("/login"), 1000);
     } catch (error) {
-      setError(error.response?.data?.message || "Signup failed");
+      const errorMessage = error.response?.data?.message || "Signup failed";
+      toast.error(errorMessage, toastConfig);
+      console.error("Signup error:", error.response?.data || error);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleSignup();
+    }
+  };
+  
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white p-8 rounded-lg shadow-lg w-96">
         <h2 className="text-2xl font-semibold text-center mb-6">Sign Up</h2>
-
-        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-        {successMessage && <p className="text-green-500 text-sm mb-4">{successMessage}</p>}
 
         {/* Role Selection */}
         <label className="block text-sm font-medium mb-2">Signup as:</label>
@@ -57,6 +76,7 @@ const Signup = () => {
           placeholder="Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          onKeyDown={handleKeyDown}
           className="w-full p-2 border rounded-md mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
 
@@ -65,6 +85,7 @@ const Signup = () => {
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={handleKeyDown}
           className="w-full p-2 border rounded-md mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
 
@@ -73,6 +94,7 @@ const Signup = () => {
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={handleKeyDown}
           className="w-full p-2 border rounded-md mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
 
@@ -86,14 +108,14 @@ const Signup = () => {
           {loading ? "Signing up..." : "Sign Up"}
         </button>
 
-        <p className="mt-4 text-center">
+        <p className="text-center text-sm mt-4">
           Already have an account?{" "}
-          <button
+          <span
+            className="text-blue-600 cursor-pointer"
             onClick={() => navigate("/login")}
-            className="text-blue-600 hover:underline"
           >
-            Login here
-          </button>
+            Login
+          </span>
         </p>
       </div>
     </div>

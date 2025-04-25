@@ -1,245 +1,134 @@
-// import React, { useEffect, useState } from "react";
-// import axios from "axios";
-
-// const TeacherDashboard = () => {
-//   const [assignments, setAssignments] = useState([]);
-//   const [Sample, setSample] = useState([]);
-
-//   useEffect(() => {
-//     const fetchData = async () => {
-//       try {
-//         const token = sessionStorage.getItem("token");
-
-//         // Fetch Assignments
-//         const assignmentsRes = await axios.get("http://localhost:5000/api/files/upload/assignments", {
-//           headers: { Authorization: `Bearer ${token}` },
-//         });
-//         setAssignments(assignmentsRes.data);
-
-//         // Fetch Submissions
-//         const submissionsRes = await axios.get("http://localhost:5000/api/files/upload/", {
-//           headers: { Authorization: `Bearer ${token}` },
-//         });
-//         setSubmissions(submissionsRes.data);
-//       } catch (error) {
-//         console.error("Error fetching data:", error);
-//       }
-//     };
-
-//     fetchData();
-//   }, []);
-
-//   return (
-//     <div className="min-h-screen bg-gray-100 p-6">
-//       <div className="max-w-4xl mx-auto bg-white shadow-lg rounded-lg p-6">
-//         <h2 className="text-3xl font-bold text-blue-600 text-center mb-6">Teacher Dashboard</h2>
-
-//         {/* Assignment List */}
-//         <div className="mb-6">
-//           <h3 className="text-2xl font-semibold text-gray-700 mb-3">📌 Assignments</h3>
-//           {assignments.length > 0 ? (
-//             <ul className="bg-blue-50 p-4 rounded-lg shadow-md">
-//               {assignments.map((assignment) => (
-//                 <li key={assignment._id} className="p-2 border-b last:border-none">
-//                   📄 <span className="font-medium">{assignment.title}</span>
-//                 </li>
-//               ))}
-//             </ul>
-//           ) : (
-//             <p className="text-gray-500 italic">No assignments found.</p>
-//           )}
-//         </div>
-
-//         {/* Student Submissions */}
-//         <div>
-//           <h3 className="text-2xl font-semibold text-gray-700 mb-3">📥 Student Sample</h3>
-//           {Sample.length > 0 ? (
-//             <ul className="bg-green-50 p-4 rounded-lg shadow-md">
-//               {Sample.map((submission) => (
-//                 <li key={submission._id} className="p-2 border-b last:border-none">
-//                   ✅ <span className="font-medium">{submission.studentName}</span> - {submission.assignmentTitle}
-//                 </li>
-//               ))}
-//             </ul>
-//           ) : (
-//             <p className="text-gray-500 italic">No Sample found.</p>
-//           )}
-//         </div>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default TeacherDashboard;
-
-
-
-
-import React, { useState } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import FileUploadForm from "../components/FileUploadForm";
+import HandwritingSamplesTable from "../components/HandwritingSamplesTable";
+import AssignmentsTable from "../components/AssignmentsTable";
+import FaceRegistrationModule from "../components/FaceRegistrationModule";
+import ClassAttendanceModule from "../components/ClassAttendanceModule";
 
 const TeacherDashboard = () => {
+  const API_BASE_URL = "http://localhost:5000/api/files";
+  const FACE_API_URL = "http://localhost:5000/api/model";
+  
+  const [handwritingSamples, setHandwritingSamples] = useState([]);
   const [assignments, setAssignments] = useState([]);
-  const [submissions, setSubmissions] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
 
-  const fetchData = async () => {
-    setIsLoading(true);
-    setError(null);
-    
+  const token = sessionStorage.getItem("authToken");
+
+  
+  // Function to handle evaluation (marks saving)
+  const handleEvaluate = async (fileId, marks) => {
     try {
-      const token = sessionStorage.getItem("authToken");
-       console.log("Token being sent:", token); // Debugging log
-
-      // Fetch Assignments
-      const assignmentsRes = await axios.get(
-        "http://localhost:5000/api/files/assignments",
+      await axios.put(
+        `${API_BASE_URL}/evaluate/${fileId}`,
+        { marks },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setAssignments(assignmentsRes.data);
-
-      // Fetch Submissions
-      const submissionsRes = await axios.get(
-        "http://localhost:5000/api/files/handwriting_samples",
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setSubmissions(submissionsRes.data);
+      toast.success("Marks saved successfully!");
+      fetchFiles(); // Refresh files after evaluation
     } catch (error) {
-      console.error("Error fetching data:", error);
-      setError("Failed to fetch data. Please try again.");
-    } finally {
-      setIsLoading(false);
+      toast.error(error.response?.data?.message || "Oops! Something went wrong while saving marks.");
     }
   };
+
+  // Handle file upload: checks if all the necessary info is provided
+  const handleUpload = async ({ studentId, studentName, file }) => {
+    if ((!studentId && !studentName) || !file) {
+      toast.error("Oops! Please provide either Student ID or Name, and make sure to select a file.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("studentId", studentId);
+    formData.append("file", file);
+    formData.append("fileCategory", "handwriting_sample");
+    formData.append("studentName", studentName);
+
+    setIsUploading(true); // Show loading indicator while uploading
+    try {
+      await axios.post(`${API_BASE_URL}/upload/teacher`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      toast.success("File uploaded successfully!");
+      fetchFiles(); // Refresh the file list after successful upload
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Upload failed. Please try again.");
+    } finally {
+      setIsUploading(false); // Hide loading after operation completes
+    }
+  };
+
+  // Fetch all files (handwriting samples and assignments)
+  const fetchFiles = async () => {
+    setIsLoading(true); // Start loading spinner
+    try {
+      const res = await axios.get(`${API_BASE_URL}/all-files`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setHandwritingSamples(res.data.handwritingSamples || []);
+      setAssignments(res.data.assignments || []);
+      toast.success(
+        `Successfully retrieved ${res.data.handwritingSamples?.length || 0} handwriting samples and ${res.data.assignments?.length || 0} assignments.`
+      );
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Error fetching files. Please try again.");
+    } finally {
+      setIsLoading(false); // Hide loading spinner once data is fetched
+    }
+  };
+
+  // Fetch files when the component loads
+  useEffect(() => {
+    fetchFiles();
+  }, [token]);
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       <div className="max-w-6xl mx-auto bg-white shadow-lg rounded-lg p-6">
-        <h2 className="text-3xl font-bold text-blue-600 text-center mb-6">
+        <h1 className="text-3xl font-bold text-blue-600 text-center mb-6">
           Teacher Dashboard
-        </h2>
+        </h1>
 
-        <div className="flex justify-center mb-8">
-          <button
-            onClick={fetchData}
-            disabled={isLoading}
-            className={`px-6 py-3 rounded-lg font-medium text-white ${
-              isLoading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
-            } transition-colors`}
-          >
-            {isLoading ? "Fetching Data..." : "Fetch Data"}
-          </button>
+        <FaceRegistrationModule token={token} apiUrl={FACE_API_URL} />
+
+        <ClassAttendanceModule token={token} apiUrl={FACE_API_URL} />
+
+        <FileUploadForm onUpload={handleUpload} isLoading={isUploading} />
+        
+        <div className="max-w-5xl mx-auto mt-10 mb-4 border rounded shadow">
+          <input
+            type="text"
+            placeholder="Search by student name"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full p-2 border rounded font-semibold"
+          />
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-100 text-red-700 rounded-lg">
-            {error}
-          </div>
-        )}
+        <AssignmentsTable
+          data={assignments}
+          isLoading={isLoading}
+          API_BASE_URL={API_BASE_URL}
+          searchTerm={searchTerm}
+          handleEvaluate={handleEvaluate}
+        />
 
-        {/* Assignment Table */}
-        <div className="mb-8">
-          <h3 className="text-2xl font-semibold text-gray-700 mb-4">
-            📌 Assignments
-          </h3>
-          {assignments.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full bg-white border border-gray-200">
-                <thead className="bg-blue-50">
-                  <tr>
-                    <th className="py-3 px-4 border-b text-left">Title</th>
-                    <th className="py-3 px-4 border-b text-left">Description</th>
-                    <th className="py-3 px-4 border-b text-left">Due Date</th>
-                    <th className="py-3 px-4 border-b text-left">File</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {assignments.map((assignment) => (
-                    <tr key={assignment._id} className="hover:bg-gray-50">
-                      <td className="py-3 px-4 border-b">{assignment.title}</td>
-                      <td className="py-3 px-4 border-b">
-                        {assignment.description || "N/A"}
-                      </td>
-                      <td className="py-3 px-4 border-b">
-                        {new Date(assignment.dueDate).toLocaleDateString()}
-                      </td>
-                      <td className="py-3 px-4 border-b">
-                        <a
-                          href={`http://localhost:5000/${assignment.filePath}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline"
-                        >
-                          Download
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-gray-500 italic">
-              {isLoading ? "Loading assignments..." : "No assignments found."}
-            </p>
-          )}
-        </div>
-
-        {/* Student Submissions Table */}
-        <div>
-          <h3 className="text-2xl font-semibold text-gray-700 mb-4">
-            📥 Student Submissions
-          </h3>
-          {submissions.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full bg-white border border-gray-200">
-                <thead className="bg-green-50">
-                  <tr>
-                    <th className="py-3 px-4 border-b text-left">Student</th>
-                    <th className="py-3 px-4 border-b text-left">Assignment</th>
-                    <th className="py-3 px-4 border-b text-left">Submitted At</th>
-                    <th className="py-3 px-4 border-b text-left">File</th>
-                    <th className="py-3 px-4 border-b text-left">Grade</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {submissions.map((submission) => (
-                    <tr key={submission._id} className="hover:bg-gray-50">
-                      <td className="py-3 px-4 border-b">
-                        {submission.studentName || "Anonymous"}
-                      </td>
-                      <td className="py-3 px-4 border-b">
-                        {submission.assignmentTitle}
-                      </td>
-                      <td className="py-3 px-4 border-b">
-                        {new Date(submission.submittedAt).toLocaleString()}
-                      </td>
-                      <td className="py-3 px-4 border-b">
-                        <a
-                          href={`http://localhost:5000/${submission.filePath}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline"
-                        >
-                          Download
-                        </a>
-                      </td>
-                      <td className="py-3 px-4 border-b">
-                        {submission.grade || "Not graded"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-gray-500 italic">
-              {isLoading ? "Loading submissions..." : "No submissions found."}
-            </p>
-          )}
-        </div>
+        <HandwritingSamplesTable
+          data={handwritingSamples}
+          isLoading={isLoading}
+          API_BASE_URL={API_BASE_URL}
+          searchTerm={searchTerm}
+        />
       </div>
+      <ToastContainer position="top-right" autoClose={3000} />
     </div>
   );
 };

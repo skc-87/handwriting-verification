@@ -6,7 +6,7 @@ const ProtectedRoute = ({ children }) => {
   const token = sessionStorage.getItem("authToken");
 
   if (!token) {
-    toast.error("You are not logged in! Redirecting...", { autoClose: 3000 }); // 2-sec alert
+    toast.error("You are not logged in! Redirecting...", { autoClose: 2000 }); // 2-sec alert
     return <Navigate to="/login" replace />;
   }
 

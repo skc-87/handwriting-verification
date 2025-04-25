@@ -12,7 +12,7 @@ import "react-toastify/dist/ReactToastify.css"; // Import toast styles
 function App() {
   return (
     <Router>
-     <ToastContainer position="top-center" autoClose={3000} />
+      <ToastContainer position="top-right" autoClose={2000} />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />

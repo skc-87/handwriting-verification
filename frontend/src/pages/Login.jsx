@@ -10,7 +10,22 @@ const Login = () => {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
+  // Toast configuration
+  const toastConfig = {
+    position: "top-right",
+    autoClose: 2000,
+    hideProgressBar: false,
+    closeOnClick: true,
+    pauseOnHover: true,
+    draggable: true,
+  };
+
   const handleLogin = async () => {
+    if (!email || !password) {
+      toast.error("Please enter both email and password", toastConfig);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -22,11 +37,11 @@ const Login = () => {
 
       console.log("Full Response:", response.data);
 
-      const { token, role, ...user } = response.data;
+      const { token, role, name, ...user } = response.data;
 
       if (!token) {
         console.error("Token not received from backend!");
-        toast.error("Authentication failed. Please try again.");
+        toast.error("Authentication failed. Please try again.", toastConfig);
         return;
       }
 
@@ -34,26 +49,37 @@ const Login = () => {
       sessionStorage.setItem("authToken", token);
       sessionStorage.setItem("role", role);
       sessionStorage.setItem("user", JSON.stringify(user)); // user = { _id, name, email }
+      sessionStorage.setItem("userName", name);
 
       console.log("Stored Token:", sessionStorage.getItem("authToken"));
-      toast.success("Login successful!");
+      toast.success("Login successful!", toastConfig);
 
-      // Redirect based on role
-      if (role === "teacher") {
-        navigate("/teacher-dashboard");
-      } else {
-        navigate("/upload");
-      }
+      // Redirect based on role after a short delay to allow toast to be seen
+      setTimeout(() => {
+        if (role === "teacher") {
+          navigate("/teacher-dashboard");
+        } else {
+          navigate("/upload");
+        }
+      }, 1000);
 
     } catch (error) {
       const errorMessage = error.response?.data?.message || "Login failed";
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast.error(errorMessage, toastConfig);
       console.error("Login error:", error.response?.data || error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Handler for Enter key press
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleLogin();
+    }
+  };
+  
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -67,6 +93,7 @@ const Login = () => {
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={handleKeyDown}
           className="w-full p-2 border rounded-md mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
 
@@ -75,6 +102,7 @@ const Login = () => {
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={handleKeyDown}
           className="w-full p-2 border rounded-md mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
 
