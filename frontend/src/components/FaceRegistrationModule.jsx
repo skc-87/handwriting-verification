@@ -119,7 +119,7 @@ const FaceRegistrationModule = ({ token, apiUrl }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }; 
 
   return (
     <div className="mb-8 p-6 border rounded-lg bg-white shadow-sm">
