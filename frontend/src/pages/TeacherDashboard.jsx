@@ -91,42 +91,74 @@ const TeacherDashboard = () => {
   }, [token]);
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-6xl mx-auto bg-white shadow-lg rounded-lg p-6">
-        <h1 className="text-3xl font-bold text-blue-600 text-center mb-6">
-          Teacher Dashboard
-        </h1>
-
-        <FaceRegistrationModule token={token} apiUrl={FACE_API_URL} />
-
-        <ClassAttendanceModule token={token} apiUrl={FACE_API_URL} />
-
-        <FileUploadForm onUpload={handleUpload} isLoading={isUploading} />
-        
-        <div className="max-w-5xl mx-auto mt-10 mb-4 border rounded shadow">
-          <input
-            type="text"
-            placeholder="Search by student name"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full p-2 border rounded font-semibold"
-          />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Main Dashboard Card with Gradient Border */}
+        <div className="relative p-0.5 rounded-xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 mb-8 shadow-lg">
+          <div className="bg-white rounded-xl p-6">
+            <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 text-center mb-8">
+              Teacher Dashboard
+            </h1>
+  
+            {/* Face Registration Module with Gradient Border */}
+            <div className="relative p-0.5 rounded-xl bg-gradient-to-r from-blue-400 to-purple-400 mb-8 group hover:shadow-lg transition-shadow duration-300">
+              <div className="bg-white rounded-xl p-6">
+                <FaceRegistrationModule token={token} apiUrl={FACE_API_URL} />
+              </div>
+            </div>
+  
+            {/* Attendance Module with Gradient Border */}
+            <div className="relative p-0.5 rounded-xl bg-gradient-to-r from-green-400 to-blue-400 mb-8 group hover:shadow-lg transition-shadow duration-300">
+              <div className="bg-white rounded-xl p-6">
+                <ClassAttendanceModule token={token} apiUrl={FACE_API_URL} />
+              </div>
+            </div>
+  
+            {/* File Upload Form with Gradient Border */}
+            <div className="relative p-0.5 rounded-xl bg-gradient-to-r from-blue-300 to-green-400 mb-8 group hover:shadow-lg transition-shadow duration-300">
+              <div className="bg-white rounded-xl p-6">
+                <FileUploadForm onUpload={handleUpload} isLoading={isUploading} />
+              </div>
+            </div>
+  
+            {/* Search Bar with Gradient Border */}
+            <div className="relative max-w-5xl mx-auto mb-8">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-300 to-purple-300 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
+              <input
+                type="text"
+                placeholder="Search by student name"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-500 shadow-sm transition-all duration-300 hover:shadow-md"
+              />
+            </div>
+  
+            {/* Assignments Table with Gradient Border */}
+            <div className="relative p-0.5 rounded-xl bg-gradient-to-r from-indigo-400 to-purple-400 mb-8 group hover:shadow-lg transition-shadow duration-300">
+              <div className="bg-white rounded-xl p-6">
+                <AssignmentsTable
+                  data={assignments}
+                  isLoading={isLoading}
+                  API_BASE_URL={API_BASE_URL}
+                  searchTerm={searchTerm}
+                  handleEvaluate={handleEvaluate}
+                />
+              </div>
+            </div>
+  
+            {/* Handwriting Samples Table with Gradient Border */}
+            <div className="relative p-0.5 rounded-xl bg-gradient-to-r from-pink-400 to-red-400 group hover:shadow-lg transition-shadow duration-300">
+              <div className="bg-white rounded-xl p-6">
+                <HandwritingSamplesTable
+                  data={handwritingSamples}
+                  isLoading={isLoading}
+                  API_BASE_URL={API_BASE_URL}
+                  searchTerm={searchTerm}
+                />
+              </div>
+            </div>
+          </div>
         </div>
-
-        <AssignmentsTable
-          data={assignments}
-          isLoading={isLoading}
-          API_BASE_URL={API_BASE_URL}
-          searchTerm={searchTerm}
-          handleEvaluate={handleEvaluate}
-        />
-
-        <HandwritingSamplesTable
-          data={handwritingSamples}
-          isLoading={isLoading}
-          API_BASE_URL={API_BASE_URL}
-          searchTerm={searchTerm}
-        />
       </div>
       <ToastContainer position="top-right" autoClose={3000} />
     </div>

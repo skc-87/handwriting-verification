@@ -1,3 +1,5 @@
 student_id,name,date,time,subject,status
 123,sanjay,2025-04-26,00:13:24,Mathematics,Present
 123,sanjay,2025-04-26,00:23:50,Mathematics,Absent
+123,sanjay,2025-04-26,11:37:40,Chemistry,Present
+1234,sz,2025-04-26,11:54:17,Physics,Present

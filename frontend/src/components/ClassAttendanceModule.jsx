@@ -240,7 +240,7 @@ const ClassAttendanceModule = ({ token, apiUrl }) => {
                 {record.student_id || record['Student ID'] || 'N/A'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {record.student_name || record['Student Name'] || 'N/A'}
+              {record.student_name || record['Student Name'] || record['student_name'] || record.Name || record.name || 'N/A'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {record.time || record['Time'] || 'N/A'}
@@ -316,7 +316,7 @@ const ClassAttendanceModule = ({ token, apiUrl }) => {
                         {record.student_id || 'N/A'}
                       </td>
                       <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                        {record.student_name || 'N/A'}
+                      {record.student_name || record['Student Name'] || record['student_name'] || record.Name || record.name || 'N/A'}
                       </td>
                       <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
                         {record.time || 'N/A'}
@@ -353,39 +353,56 @@ const ClassAttendanceModule = ({ token, apiUrl }) => {
   };
 
   return (
-    <div className="mb-8 p-6 border rounded-lg bg-white shadow-sm">
-      <h2 className="text-2xl font-semibold mb-6 text-gray-800">
+    <div className="mb-8 p-6 rounded-lg bg-white shadow-lg border border-transparent relative overflow-hidden group hover:shadow-xl transition-all duration-300">
+      {/* Gradient border effect */}
+      <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-20 transition-opacity duration-500 rounded-lg -z-10"></div>
+      
+      <h2 className="text-2xl font-bold mb-6  bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
         Class Attendance
       </h2>
-
+  
       {/* Tab Navigation */}
-      <div className="flex border-b mb-6">
+      <div className="flex border-b border-gray-200 mb-6">
         <button
-          className={`py-2 px-4 font-medium ${activeTab === "current" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500"}`}
+          className={`py-2 px-4 font-medium relative transition-all duration-300 ${
+            activeTab === "current" 
+              ? "text-blue-600" 
+              : "text-gray-500 hover:text-blue-500"
+          }`}
           onClick={() => setActiveTab("current")}
         >
-          Today's Attendance
+          Today&apos;s Attendance
+          {activeTab === "current" && (
+            <span className="absolute bottom-0 left-0 w-full h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></span>
+          )}
         </button>
         <button
-          className={`py-2 px-4 font-medium ${activeTab === "history" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500"}`}
+          className={`py-2 px-4 font-medium relative transition-all duration-300 ${
+            activeTab === "history" 
+              ? "text-blue-600" 
+              : "text-gray-500 hover:text-blue-500"
+          }`}
           onClick={() => setActiveTab("history")}
         >
           Attendance History
+          {activeTab === "history" && (
+            <span className="absolute bottom-0 left-0 w-full h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></span>
+          )}
         </button>
       </div>
-
+  
       {/* Attendance Form (shown only for current tab) */}
       {activeTab === "current" && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Subject *
               </label>
               <select
                 value={formData.subject}
                 onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-500 transition-all duration-300 shadow-sm"
                 required
                 disabled={isLoading}
               >
@@ -396,8 +413,8 @@ const ClassAttendanceModule = ({ token, apiUrl }) => {
                 <option value="Biology">Biology</option>
               </select>
             </div>
-
-            <div>
+  
+            <div className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Date
               </label>
@@ -407,12 +424,12 @@ const ClassAttendanceModule = ({ token, apiUrl }) => {
                 onChange={(e) => {
                   setFormData({ ...formData, date: e.target.value });
                 }}
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-500 transition-all duration-300 shadow-sm"
                 max={new Date().toISOString().split("T")[0]}
                 disabled={isLoading}
               />
             </div>
-
+  
             <div className="flex flex-col">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Face Capture *
@@ -420,10 +437,10 @@ const ClassAttendanceModule = ({ token, apiUrl }) => {
               <button
                 type="button"
                 onClick={() => setShowCamera(true)}
-                className={`px-4 py-2 rounded-md ${
+                className={`px-4 py-2.5 rounded-lg font-medium transition-all duration-300 ${
                   !formData.subject || isLoading
-                    ? "bg-gray-300 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                    ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                    : "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-md hover:shadow-lg"
                 }`}
                 disabled={!formData.subject || isLoading}
               >
@@ -431,27 +448,27 @@ const ClassAttendanceModule = ({ token, apiUrl }) => {
               </button>
             </div>
           </div>
-
+  
           {showCamera && (
-            <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-              <div className="w-full max-w-md mx-auto space-y-3">
+            <div className="mb-6 p-4 border rounded-xl bg-gray-50 shadow-inner">
+              <div className="w-full max-w-md mx-auto space-y-4">
                 <Webcam
                   audio={false}
                   ref={webcamRef}
                   screenshotFormat="image/jpeg"
                   videoConstraints={{ facingMode: "user", width: 1280, height: 720 }}
-                  className="rounded-md border border-gray-300 w-full"
+                  className="rounded-lg border-2 border-gray-200 w-full shadow-md"
                 />
                 <div className="flex space-x-3">
                   <button
                     onClick={captureImage}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-lg font-medium hover:from-green-600 hover:to-blue-600 transition-all duration-300 shadow-md hover:shadow-lg"
                   >
                     Capture
                   </button>
                   <button
                     onClick={() => setShowCamera(false)}
-                    className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
+                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-lg font-medium hover:from-gray-600 hover:to-gray-700 transition-all duration-300 shadow-md hover:shadow-lg"
                   >
                     Cancel
                   </button>
@@ -459,40 +476,40 @@ const ClassAttendanceModule = ({ token, apiUrl }) => {
               </div>
             </div>
           )}
-
+  
           {formData.image && !showCamera && (
             <div className="mb-6 flex flex-col items-center">
-              <div className="w-full max-w-md border border-gray-300 rounded-md p-1 mb-3">
+              <div className="w-full max-w-md border-2 border-gray-200 rounded-xl p-1 mb-4 shadow-md">
                 <img
                   src={formData.image}
                   alt="Captured for attendance"
-                  className="w-full rounded-md"
+                  className="w-full rounded-lg"
                 />
               </div>
               <button
                 onClick={() => setFormData({ ...formData, image: "" })}
-                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-lg font-medium hover:from-red-600 hover:to-pink-600 transition-all duration-300 shadow-md hover:shadow-lg"
                 disabled={isLoading}
               >
                 Remove Image
               </button>
             </div>
           )}
-
+  
           <div className="flex justify-end mb-6">
             <button
               onClick={handleTakeAttendance}
               disabled={isLoading || !formData.subject || !formData.image}
-              className={`px-6 py-2 rounded-md ${
+              className={`px-6 py-2.5 rounded-lg font-medium transition-all duration-300 ${
                 isLoading || !formData.subject || !formData.image
-                  ? "bg-gray-300 cursor-not-allowed"
-                  : "bg-green-600 hover:bg-green-700 text-white"
+                  ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                  : "bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 text-white shadow-lg hover:shadow-xl"
               }`}
             >
               {isLoading ? (
-                <span className="flex items-center">
+                <span className="flex items-center justify-center">
                   <svg
-                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                    className="animate-spin -ml-1 mr-2 h-5 w-5 text-white"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
@@ -520,10 +537,10 @@ const ClassAttendanceModule = ({ token, apiUrl }) => {
           </div>
         </>
       )}
-
+  
       {/* History Search (shown only for history tab) */}
       {activeTab === "history" && (
-        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+        <div className="mb-6 p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl shadow-inner">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -533,20 +550,20 @@ const ClassAttendanceModule = ({ token, apiUrl }) => {
                 type="date"
                 value={searchDate}
                 onChange={(e) => setSearchDate(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-500 transition-all duration-300 shadow-sm"
                 max={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split("T")[0]}
               />
             </div>
             <button
               onClick={() => setSearchDate("")}
-              className="mt-2 md:mt-6 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+              className="mt-2 md:mt-0 px-4 py-2.5 bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700 rounded-lg font-medium hover:from-gray-300 hover:to-gray-400 transition-all duration-300 shadow-sm hover:shadow-md"
             >
               Clear Filter
             </button>
           </div>
         </div>
       )}
-
+  
       {/* Attendance Records Section */}
       <div className="mt-6">
         <div className="flex justify-between items-center mb-4">
@@ -558,25 +575,34 @@ const ClassAttendanceModule = ({ token, apiUrl }) => {
           <button 
             onClick={activeTab === "current" ? fetchAttendanceRecords : fetchAllAttendanceRecords}
             disabled={isLoadingRecords}
-            className={`px-3 py-1 rounded-md text-sm ${
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${
               isLoadingRecords
                 ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                : "bg-blue-100 text-blue-600 hover:bg-blue-200"
+                : "bg-gradient-to-r from-blue-100 to-purple-100 text-blue-600 hover:from-blue-200 hover:to-purple-200 shadow-sm hover:shadow-md"
             }`}
           >
             Refresh
           </button>
         </div>
-
+  
         {isLoadingRecords ? (
           <div className="flex justify-center items-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
           </div>
         ) : allAttendanceRecords.length > 0 ? (
           activeTab === "current" ? renderCurrentDateTable() : renderHistoryTables()
         ) : (
-          <div className="text-center py-8 text-gray-500">
-            No attendance records found
+          <div className="text-center py-12 text-gray-500">
+            <div className="inline-block p-4 bg-gray-100 rounded-full mb-3">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+            <p className="text-lg">
+              {searchDate 
+                ? `No attendance records found for ${searchDate}`
+                : "No attendance records available"}
+            </p>
           </div>
         )}
       </div>
