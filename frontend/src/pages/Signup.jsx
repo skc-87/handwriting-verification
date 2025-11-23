@@ -135,6 +135,7 @@ const Signup = () => {
               >
                 <option value="student">Student</option>
                 <option value="teacher">Teacher</option>
+                <option value="librarian">Librarian</option> {/* Added librarian option */}
               </select>
             </motion.div>
           </div>

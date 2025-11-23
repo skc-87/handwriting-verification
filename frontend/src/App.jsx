@@ -5,9 +5,10 @@ import Signup from "./pages/Signup";
 import UploadFile from "./pages/UploadFile";
 import ProtectedRoute from "./ProtectedRoute";
 import TeacherDashboard from "./pages/TeacherDashboard";
+import LibrarianDashboard from './pages/LibrarianDashboard';
 
 import { ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css"; // Import toast styles
+import "react-toastify/dist/ReactToastify.css";
 
 function App() {
   return (
@@ -22,6 +23,14 @@ function App() {
           element={
             <ProtectedRoute>
               <TeacherDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/librarian-dashboard"
+          element={
+            <ProtectedRoute>
+              <LibrarianDashboard />
             </ProtectedRoute>
           }
         />

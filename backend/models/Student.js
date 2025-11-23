@@ -13,6 +13,7 @@ const studentSchema = new mongoose.Schema(
     year: { type: Number, required: true },
     digital_id_qr: { type: String },
     max_books_allowed: { type: Number, default: 3 },
+    currently_borrowed_books: { type: Number, default: 0 }, // Added this field
   },
   { timestamps: true }
 );

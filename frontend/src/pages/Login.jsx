@@ -62,8 +62,11 @@ const Login = () => {
       toast.success("Login successful!", toastConfig);
 
       setTimeout(() => {
+        // Updated role-based redirection with librarian
         if (user.role === "teacher") {
           navigate("/teacher-dashboard");
+        } else if (user.role === "librarian") {
+          navigate("/librarian-dashboard");
         } else {
           navigate("/upload");
         }

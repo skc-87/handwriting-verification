@@ -8,6 +8,8 @@ const fileRoutes = require("./routes/fileRoutes"); // ✅ Import File Routes
 const path = require("path");
 const modelRoute = require("./routes/modelRoutes");
 const eventRoutes = require("./routes/eventRoutes"); // ADD THIS LINE
+const studentEventRoutes = require("./routes/studentEventRoutes");
+const libraryRoutes = require('./routes/libraryRoutes');
 
 
 
@@ -42,6 +44,10 @@ const fetchedFilesPath = path.join(__dirname, "../model/fetched_files"); // Adju
 app.use("/download", express.static(fetchedFilesPath));
 
 app.use("/api/events", eventRoutes); // ADD THIS LINE
+
+app.use("/api/student/events", studentEventRoutes);
+
+app.use('/api/library', libraryRoutes);
 
 
 const PORT = process.env.PORT || 5000;
