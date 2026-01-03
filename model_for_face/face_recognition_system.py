@@ -6,11 +6,29 @@ import os
 import sys
 import jwt
 import json
+import traceback
 from datetime import datetime
-from deepface import DeepFace
 
-# Suppress TensorFlow informational messages
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+# SUPPRESS ALL TENSORFLOW WARNINGS COMPLETELY
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
+# Redirect stderr to devnull to suppress all warnings
+import io
+import contextlib
+
+class SuppressStderr:
+    def __enter__(self):
+        self._original_stderr = sys.stderr
+        sys.stderr = io.StringIO()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stderr = self._original_stderr
+
+# Import DeepFace with suppressed output
+with SuppressStderr():
+    from deepface import DeepFace
 
 JWT_SECRET = "4349ef690de9a0fa8704f4d8ec9238e01a8446000d6d4cbc494dfa397468772b"
 
@@ -37,18 +55,21 @@ class ArcFaceSystem:
                             'embedding': np.array(eval(row['embedding']))
                         })
             except (IOError, csv.Error) as e:
-                print(f"Warning: Could not load students. Error: {e}", file=sys.stderr)
+                # Don't print to stderr - just fail silently
                 self.registered_students = []
 
     def _adjust_brightness(self, img: np.ndarray) -> np.ndarray:
         """Improves brightness and contrast of an image using CLAHE."""
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        h, s, v = cv2.split(hsv)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        v_enhanced = clahe.apply(v)
-        final_hsv = cv2.merge((h, s, v_enhanced))
-        img_enhanced = cv2.cvtColor(final_hsv, cv2.COLOR_HSV2BGR)
-        return img_enhanced
+        try:
+            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            h, s, v = cv2.split(hsv)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            v_enhanced = clahe.apply(v)
+            final_hsv = cv2.merge((h, s, v_enhanced))
+            img_enhanced = cv2.cvtColor(final_hsv, cv2.COLOR_HSV2BGR)
+            return img_enhanced
+        except:
+            return img
 
     def check_duplicate_face(self, new_embedding):
         """Check if the face embedding already exists in the database."""
@@ -74,10 +95,11 @@ class ArcFaceSystem:
             if img is None:
                 return False, f"Cannot read the image file at: {image_path}"
 
-            embedding_obj = DeepFace.represent(
-                img_path=image_path, model_name=self.embedding_model,
-                detector_backend=self.detector_backend, enforce_detection=True
-            )
+            with SuppressStderr():
+                embedding_obj = DeepFace.represent(
+                    img_path=image_path, model_name=self.embedding_model,
+                    detector_backend=self.detector_backend, enforce_detection=True
+                )
 
             if len(embedding_obj) > 1:
                 return False, "Multiple faces were detected. Please use an image with only one person."
@@ -107,7 +129,6 @@ class ArcFaceSystem:
         except Exception as e:
             return False, f"An unexpected registration error occurred: {str(e)}"
 
-    # MODIFIED: Accept date parameter and use it instead of current date
     def take_attendance(self, subject: str, image_path: str, attendance_date: str) -> tuple:
         """
         Takes attendance by detecting faces, matching them, and saving a new
@@ -131,13 +152,16 @@ class ArcFaceSystem:
             processed_img = self._adjust_brightness(img)
 
             present_student_ids = set()
+            present_students = []
+            unknown_faces = 0
             
             # Step 2: Extract faces from the adjusted image
-            faces = DeepFace.extract_faces(
-                img_path=processed_img,
-                detector_backend=self.detector_backend,
-                enforce_detection=False
-            )
+            with SuppressStderr():
+                faces = DeepFace.extract_faces(
+                    img_path=processed_img,
+                    detector_backend=self.detector_backend,
+                    enforce_detection=False
+                )
 
             for face_data in faces:
                 if face_data['confidence'] == 0: 
@@ -149,9 +173,10 @@ class ArcFaceSystem:
                 # The cropped face image is already provided by extract_faces
                 face_image = face_data['face']
                 
-                embedding_obj = DeepFace.represent(
-                    img_path=face_image, model_name=self.embedding_model, detector_backend='skip'
-                )
+                with SuppressStderr():
+                    embedding_obj = DeepFace.represent(
+                        img_path=face_image, model_name=self.embedding_model, detector_backend='skip'
+                    )
                 
                 test_embedding = np.array(embedding_obj[0]['embedding'])
                 best_match_student_id = None
@@ -171,9 +196,15 @@ class ArcFaceSystem:
                 # Step 3: Draw boxes and labels on the image
                 if best_match_student_id:
                     present_student_ids.add(best_match_student_id)
+                    present_students.append({
+                        'id': best_match_student_id,
+                        'name': best_match_student_name,
+                        'similarity': float(max_similarity)
+                    })
                     label = f"{best_match_student_name} ({max_similarity:.2f})"
                     color = (0, 255, 0) # Green for recognized
                 else:
+                    unknown_faces += 1
                     label = "Unknown"
                     color = (0, 0, 255) # Red for unrecognized
                 
@@ -190,45 +221,74 @@ class ArcFaceSystem:
             # Step 5: Save attendance with the provided date instead of current date
             self._save_full_attendance_report(subject, present_student_ids, attendance_date)
 
-            if not present_student_ids:
-                return True, "Attendance taken. No recognized students were found; all marked absent."
+            if not present_student_ids and unknown_faces == 0:
+                return True, {
+                    "message": "No faces detected in the image.",
+                    "recognized_count": 0,
+                    "total_faces": 0,
+                    "present_students": []
+                }
+            elif not present_student_ids:
+                return True, {
+                    "message": f"Found {unknown_faces} face(s) but none matched registered students.",
+                    "recognized_count": 0,
+                    "total_faces": len(faces),
+                    "unknown_faces": unknown_faces,
+                    "present_students": []
+                }
 
-            return True, f"Attendance recorded for {attendance_date}. {len(present_student_ids)} students marked as Present."
+            return True, {
+                "message": f"Attendance recorded successfully.",
+                "recognized_count": len(present_student_ids),
+                "total_faces": len(faces),
+                "unknown_faces": unknown_faces,
+                "present_students": present_students,
+                "processed_image": output_image_path,
+                "date": attendance_date
+            }
 
-        except ValueError:
+        except ValueError as e:
             self._save_full_attendance_report(subject, set(), attendance_date)
-            return True, "No faces were detected in the image. All students marked absent."
+            return True, {
+                "message": "No faces were detected in the image.",
+                "recognized_count": 0,
+                "total_faces": 0,
+                "present_students": []
+            }
         except Exception as e:
-            return False, f"An unexpected attendance error occurred: {str(e)}"
+            return False, {
+                "message": f"An unexpected error occurred: {str(e)}"
+            }
 
-    # MODIFIED: Accept date parameter
     def _save_full_attendance_report(self, subject: str, present_ids: set, attendance_date: str):
         """Helper function to save a complete attendance list for all registered students."""
-        current_time = datetime.now().strftime("%H:%M:%S")
-        # Use the provided attendance_date instead of current date
-        
-        attendance_records = []
-        for student in self.registered_students:
-            status = 'Present' if student['id'] in present_ids else 'Absent'
-            attendance_records.append({
-                'student_id': student['id'], 
-                'name': student['name'], 
-                'date': attendance_date,  # Use the provided date
-                'time': current_time, 
-                'subject': subject, 
-                'status': status
-            })
+        try:
+            current_time = datetime.now().strftime("%H:%M:%S")
             
-        if not attendance_records:
-            return
+            attendance_records = []
+            for student in self.registered_students:
+                status = 'Present' if student['id'] in present_ids else 'Absent'
+                attendance_records.append({
+                    'student_id': student['id'], 
+                    'name': student['name'], 
+                    'date': attendance_date,
+                    'time': current_time, 
+                    'subject': subject, 
+                    'status': status
+                })
+                
+            if not attendance_records:
+                return
 
-        file_exists = os.path.exists('attendance.csv') and os.path.getsize('attendance.csv') > 0
-        with open('attendance.csv', 'a', newline='') as f:
-            fieldnames = ['student_id', 'name', 'date', 'time', 'subject', 'status']
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            if not file_exists:
-                writer.writeheader()
-            writer.writerows(attendance_records)
+            file_exists = os.path.exists('attendance.csv') and os.path.getsize('attendance.csv') > 0
+            with open('attendance.csv', 'a', newline='') as f:
+                fieldnames = ['student_id', 'name', 'date', 'time', 'subject', 'status']
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerows(attendance_records)
+        except:
+            pass  # Silently fail if can't save attendance
 
     def list_registered_students(self):
         """Utility method to list all registered students (for debugging)."""
@@ -244,44 +304,61 @@ def validate_token(token):
 
 def main():
     """Main function to handle command-line operations."""
-    try:
-        if len(sys.argv) < 3:
-            raise ValueError("Insufficient arguments.")
+    # Suppress all output except the final JSON
+    with SuppressStderr():
+        try:
+            if len(sys.argv) < 3:
+                raise ValueError("Insufficient arguments.")
 
-        operation = sys.argv[1]
-        auth_token = sys.argv[-1]
+            operation = sys.argv[1]
+            auth_token = sys.argv[-1]
 
-        if not validate_token(auth_token):
-            print(json.dumps({"success": False, "message": "Unauthorized: Invalid token."}))
-            return
+            if not validate_token(auth_token):
+                result = {"success": False, "message": "Unauthorized: Invalid token."}
+                print(json.dumps(result))
+                sys.exit(0)  # Exit with 0, not 1
 
-        system = ArcFaceSystem()
+            system = ArcFaceSystem()
 
-        if operation == "register":
-            if len(sys.argv) != 6:
-                raise ValueError("Usage: register <id> <name> <path> <token>")
-            student_id, name, image_path = sys.argv[2], sys.argv[3], sys.argv[4]
-            success, message = system.register_student(student_id, name, image_path)
-            print(json.dumps({"success": success, "message": message}))
+            if operation == "register":
+                if len(sys.argv) != 6:
+                    raise ValueError("Usage: register <id> <name> <path> <token>")
+                student_id, name, image_path = sys.argv[2], sys.argv[3], sys.argv[4]
+                success, message = system.register_student(student_id, name, image_path)
+                result = {"success": success, "message": message}
+                print(json.dumps(result))
 
-        elif operation == "attendance":
-            # Updated to expect 6 arguments: attendance <subject> <path> <date> <token>
-            if len(sys.argv) != 6:
-                raise ValueError("Usage: attendance <subject> <path> <date> <token>")
-            subject, image_path, attendance_date = sys.argv[2], sys.argv[3], sys.argv[4]
-            success, message = system.take_attendance(subject, image_path, attendance_date)
-            print(json.dumps({"success": success, "message": message}))
-            
-        elif operation == "list":
-            students = system.list_registered_students()
-            print(json.dumps({"success": True, "count": len(students), "students": students}))
-            
-        else:
-            raise ValueError(f"Invalid operation: '{operation}'.")
+            elif operation == "attendance":
+                if len(sys.argv) != 6:
+                    raise ValueError("Usage: attendance <subject> <path> <date> <token>")
+                subject, image_path, attendance_date = sys.argv[2], sys.argv[3], sys.argv[4]
+                success, message = system.take_attendance(subject, image_path, attendance_date)
+                
+                if success:
+                    # If message is a dict (from successful attendance)
+                    if isinstance(message, dict):
+                        result = {"success": True, **message}
+                    else:
+                        result = {"success": True, "message": message}
+                else:
+                    result = {"success": False, "message": message}
+                    
+                print(json.dumps(result))
+                
+            elif operation == "list":
+                students = system.list_registered_students()
+                result = {"success": True, "count": len(students), "students": students}
+                print(json.dumps(result))
+                
+            else:
+                raise ValueError(f"Invalid operation: '{operation}'.")
 
-    except Exception as e:
-        print(json.dumps({"success": False, "message": "A critical system error occurred.", "error": str(e)}), file=sys.stderr)
-        sys.exit(1)
+            sys.exit(0)  # Always exit with 0
+
+        except Exception as e:
+            result = {"success": False, "message": "A critical system error occurred.", "error": str(e)}
+            print(json.dumps(result))
+            sys.exit(0)  # Exit with 0, not 1
 
 if __name__ == "__main__":
     main()

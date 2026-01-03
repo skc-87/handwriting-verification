@@ -15,16 +15,19 @@ const eventController = {
       const createdBy = req.user.id;
 
       const eventId = generateEventId();
-      const qrData = JSON.stringify({
+      
+      // Create minimal QR data as JSON string
+      const qrData = {
         eventId: eventId,
         type: "event_info",
-        title: title,
+        title: title.substring(0, 50), // Limit title length
         date: date,
-        time: time
-      });
+        time: time,
+        venue: venue.substring(0, 30) // Limit venue length
+      };
 
-      // Generate actual QR code image as base64
-      const qrCodeImage = await QRCode.toDataURL(qrData);
+      // Store as JSON string in qrCode field
+      const qrCodeString = JSON.stringify(qrData);
 
       const event = await Event.create({
         title,
@@ -33,7 +36,7 @@ const eventController = {
         time,
         venue,
         organizer,
-        qrCode: qrCodeImage, // Store as base64 image instead of JSON string
+        qrCode: qrCodeString, // Store as JSON string
         eventId,
         createdBy
       });
@@ -89,22 +92,23 @@ const eventController = {
             continue;
           }
 
-          const passData = JSON.stringify({
+          const passId = generatePassId();
+          const passData = {
             eventId: event.eventId,
-            passId: generatePassId(),
-            studentId: studentId,
-            studentName: student.name,
+            passId: passId,
+            studentId: studentId.toString(),
+            studentName: student.name.substring(0, 30), // Limit name length
             type: "event_pass"
-          });
+          };
 
-          // Generate actual QR code image for the pass
-          const qrCodeImage = await QRCode.toDataURL(passData);
+          // Store as JSON string in qrCode field
+          const qrCodeString = JSON.stringify(passData);
 
           const pass = await EventPass.create({
             eventId: event._id,
             studentId,
-            qrCode: qrCodeImage, // Store as base64 image
-            passId: JSON.parse(passData).passId
+            qrCode: qrCodeString, // Store as JSON string
+            passId: passId
           });
 
           const populatedPass = await EventPass.findById(pass._id)
@@ -128,6 +132,183 @@ const eventController = {
       res.status(500).json({
         success: false,
         message: "Failed to generate passes"
+      });
+    }
+  },
+
+  // Get QR Code Data for Frontend
+  getQRCodeData: async (req, res) => {
+    try {
+      const { eventId, passId } = req.query;
+
+      if (eventId) {
+        const event = await Event.findOne({ eventId });
+        if (!event) {
+          return res.status(404).json({
+            success: false,
+            message: "Event not found"
+          });
+        }
+
+        // Parse the JSON string back to object
+        let qrData;
+        try {
+          qrData = JSON.parse(event.qrCode);
+        } catch (error) {
+          console.error('Error parsing event QR data:', error);
+          // If parsing fails, create new QR data
+          qrData = {
+            eventId: event.eventId,
+            type: "event_info",
+            title: event.title.substring(0, 50),
+            date: event.date,
+            time: event.time
+          };
+        }
+
+        return res.json({
+          success: true,
+          qrData: qrData,
+          type: "event",
+          event: {
+            title: event.title,
+            date: event.date,
+            time: event.time,
+            venue: event.venue
+          }
+        });
+      }
+
+      if (passId) {
+        const pass = await EventPass.findOne({ passId })
+          .populate('eventId', 'title date time venue')
+          .populate('studentId', 'name email');
+
+        if (!pass) {
+          return res.status(404).json({
+            success: false,
+            message: "Pass not found"
+          });
+        }
+
+        // Parse the JSON string back to object
+        let qrData;
+        try {
+          qrData = JSON.parse(pass.qrCode);
+        } catch (error) {
+          console.error('Error parsing pass QR data:', error);
+          // If parsing fails, create new QR data
+          qrData = {
+            eventId: pass.eventId.eventId,
+            passId: pass.passId,
+            studentId: pass.studentId._id.toString(),
+            studentName: pass.studentId.name.substring(0, 30),
+            type: "event_pass"
+          };
+        }
+
+        return res.json({
+          success: true,
+          qrData: qrData,
+          type: "pass",
+          pass: {
+            studentName: pass.studentId?.name,
+            studentEmail: pass.studentId?.email,
+            eventTitle: pass.eventId?.title,
+            eventDate: pass.eventId?.date,
+            eventTime: pass.eventId?.time
+          }
+        });
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: "Either eventId or passId is required"
+      });
+    } catch (error) {
+      console.error("Get QR data error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to get QR code data"
+      });
+    }
+  },
+
+  // Fix existing corrupted QR codes
+  fixQRCode: async (req, res) => {
+    try {
+      const { eventId, passId } = req.body;
+
+      if (eventId) {
+        const event = await Event.findOne({ eventId });
+        if (!event) {
+          return res.status(404).json({
+            success: false,
+            message: "Event not found"
+          });
+        }
+
+        // Create new QR data
+        const qrData = {
+          eventId: event.eventId,
+          type: "event_info",
+          title: event.title.substring(0, 50),
+          date: event.date,
+          time: event.time,
+          venue: event.venue.substring(0, 30)
+        };
+
+        // Update with proper JSON string
+        event.qrCode = JSON.stringify(qrData);
+        await event.save();
+
+        return res.json({
+          success: true,
+          message: "QR code fixed successfully",
+          qrData: qrData
+        });
+      }
+
+      if (passId) {
+        const pass = await EventPass.findOne({ passId })
+          .populate('studentId', 'name email');
+        
+        if (!pass) {
+          return res.status(404).json({
+            success: false,
+            message: "Pass not found"
+          });
+        }
+
+        // Create new QR data
+        const qrData = {
+          eventId: pass.eventId.eventId,
+          passId: pass.passId,
+          studentId: pass.studentId._id.toString(),
+          studentName: pass.studentId.name.substring(0, 30),
+          type: "event_pass"
+        };
+
+        // Update with proper JSON string
+        pass.qrCode = JSON.stringify(qrData);
+        await pass.save();
+
+        return res.json({
+          success: true,
+          message: "QR code fixed successfully",
+          qrData: qrData
+        });
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: "Either eventId or passId is required"
+      });
+    } catch (error) {
+      console.error("Fix QR code error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to fix QR code"
       });
     }
   },
