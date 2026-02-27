@@ -45,7 +45,7 @@ Thumbs.db
 /backend/registered_students.csv
 /model/fetched_files/
 /test/
-/temp/
+backend/temp/
 /embeddings/
 /attendance/
 
