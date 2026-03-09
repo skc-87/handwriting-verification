@@ -2,20 +2,26 @@ const express = require("express");
 const { modelController } = require("../controllers/modelController");
 const faceController = require("../controllers/faceController");
 const attendanceController = require("../controllers/attendanceController");
+const { authMiddleware } = require("../middleware/authMiddleware");
+const { requireRole } = require("../middleware/roleMiddleware");
 const router = express.Router();
 
-// Model operations
-router.post("/fetch-file-path", modelController.fetchFilePath);
-router.get("/compare-handwriting/:studentId", modelController.compareHandwriting);
+// All model routes require authentication
+router.use(authMiddleware);
 
-// Face recognition
-router.post("/register-face", faceController.registerFace);
-router.post("/take-attendance", faceController.takeAttendance);
+// Model operations (teacher only)
+router.post("/fetch-file-path", requireRole("teacher"), modelController.fetchFilePath);
+// Students can compare their own handwriting; teachers can compare any student
+router.get("/compare-handwriting/:studentId", requireRole("teacher", "student"), modelController.compareHandwriting);
 
-// Attendance management
-router.put("/update-attendance-status", attendanceController.updateAttendanceStatus);
-router.get("/get-attendance", attendanceController.getAttendance);
-router.get("/get-all-attendance", attendanceController.getAllAttendance);
-router.get("/attendance-statistics", attendanceController.getAttendanceStatistics);
+// Face recognition (teacher only)
+router.post("/register-face", requireRole("teacher"), faceController.registerFace);
+router.post("/take-attendance", requireRole("teacher"), faceController.takeAttendance);
+
+// Attendance management (teacher only)
+router.put("/update-attendance-status", requireRole("teacher"), attendanceController.updateAttendanceStatus);
+router.get("/get-attendance", requireRole("teacher"), attendanceController.getAttendance);
+router.get("/get-all-attendance", requireRole("teacher"), attendanceController.getAllAttendance);
+router.get("/attendance-statistics", requireRole("teacher"), attendanceController.getAttendanceStatistics);
 
 module.exports = router;

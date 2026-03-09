@@ -1,14 +1,26 @@
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import CompareHandwriting from "../components/CompareHandwriting";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { QRCodeSVG } from "qrcode.react";
 import StudentLibrary from "../components/StudentLibrary";
+import { API_BASE_URL } from "../config";
+import DashboardLayout from "../components/DashboardLayout";
+import {
+  Loader2, Upload, CheckCircle, CloudUpload, FileText,
+  Clock, Ticket, MapPin, Calendar, X, RefreshCw, QrCode
+} from "lucide-react";
+import { GradientText, SpotlightCard, CountUp } from "../components/reactbits";
+
+const Spinner = ({ size = "h-5 w-5", color = "border-white" }) => (
+  <span className={`inline-block ${size} rounded-full border-2 border-t-transparent ${color} animate-spin`} />
+);
 
 const UploadFile = () => {
   const [file, setFile] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [studentId, setStudentId] = useState("");
   const [assignments, setAssignments] = useState([]);
@@ -16,29 +28,28 @@ const UploadFile = () => {
   const [user, setUser] = useState(null);
   const [student, setStudent] = useState(null);
   const [isReadyForComparison, setIsReadyForComparison] = useState(false);
-
   const [eventPasses, setEventPasses] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [activeTab, setActiveTab] = useState("library");
+
+  const tabTitles = { library: "My Library", events: "Event Passes", upload: "Upload & Verify", history: "Submission History" };
+  const tabSubtitles = { library: "View your borrowed books", events: "View your event passes", upload: "Submit and verify assignments", history: "Track your submissions" };
+  const currentSubtitle = studentId
+    ? `ID: ${studentId}  ·  ${tabSubtitles[activeTab]}`
+    : tabSubtitles[activeTab];
 
   useEffect(() => {
-    if (showQRModal) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
-
-    return () => {
-      document.body.style.overflow = "unset";
-    };
+    document.body.style.overflow = showQRModal ? "hidden" : "unset";
+    return () => { document.body.style.overflow = "unset"; };
   }, [showQRModal]);
 
-  const onComparisonFailed = () => {
-    toast.info(
-      "The failed assignment file has been removed. Please upload a new one."
-    );
-    setIsReadyForComparison(false);
+  const onComparisonFailed = (wasDeleted) => {
+    toast.info(wasDeleted
+      ? "The failed assignment file has been removed. Please upload a new one."
+      : "Comparison could not be completed. Your assignment is still saved — please try again later.");
+    if (wasDeleted) setIsReadyForComparison(false);
     fetchAssignments();
   };
 
@@ -47,18 +58,11 @@ const UploadFile = () => {
     setIsFetching(true);
     try {
       const token = sessionStorage.getItem("authToken");
-      const response = await axios.get(
-        `http://localhost:5000/api/files/student-assignments/${studentId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setAssignments(response.data);
+      const { data } = await axios.get(`${API_BASE_URL}/api/files/student-assignments/${studentId}`, { headers: { Authorization: `Bearer ${token}` } });
+      setAssignments(data);
     } catch (error) {
-      toast.error(
-        error.response?.data?.message || "Failed to fetch assignments"
-      );
-    } finally {
-      setIsFetching(false);
-    }
+      toast.error(error.response?.data?.message || "Failed to fetch assignments");
+    } finally { setIsFetching(false); }
   };
 
   const fetchEventPasses = async () => {
@@ -66,46 +70,27 @@ const UploadFile = () => {
     setLoadingEvents(true);
     try {
       const token = sessionStorage.getItem("authToken");
-      const response = await axios.get(
-        `http://localhost:5000/api/student/events/passes`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (response.data.success) {
-        setEventPasses(response.data.passes);
-      }
+      const { data } = await axios.get(`${API_BASE_URL}/api/student/events/passes`, { headers: { Authorization: `Bearer ${token}` } });
+      if (data.success) setEventPasses(data.passes);
     } catch (error) {
-      console.error("Failed to fetch event passes:", error);
-    } finally {
-      setLoadingEvents(false);
-    }
+      console.error("Failed to fetch event passes:", error.message);
+    } finally { setLoadingEvents(false); }
   };
 
   const handleUpload = async () => {
-    if (!file) {
-      toast.error("Please select a file before uploading.");
-      return;
-    }
-
+    if (!file) { toast.error("Please select a file before uploading."); return; }
     const token = sessionStorage.getItem("authToken");
     const formData = new FormData();
     formData.append("file", file);
     formData.append("fileCategory", "assignment");
     formData.append("studentName", user?.name || "Student");
-
     setLoading(true);
     toast.info("Uploading your assignment...", { autoClose: 2000 });
-
     try {
-      await axios.post(`http://localhost:5000/api/files/upload`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
-        },
+      await axios.post(`${API_BASE_URL}/api/files/upload`, formData, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
       });
-      toast.success(
-        "Assignment uploaded successfully! Ready for verification."
-      );
+      toast.success("Assignment uploaded successfully! Ready for verification.");
       setFile(null);
       setIsReadyForComparison(true);
       fetchAssignments();
@@ -116,579 +101,307 @@ const UploadFile = () => {
     }
   };
 
-  const showEventQRCode = (pass) => {
-    setSelectedEvent(pass);
-    setShowQRModal(true);
-  };
+  const showEventQRCode = (pass) => { setSelectedEvent(pass); setShowQRModal(true); };
+  const closeQRModal = () => { setShowQRModal(false); setSelectedEvent(null); };
 
-  const closeQRModal = () => {
-    setShowQRModal(false);
-    setSelectedEvent(null);
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") setDragActive(true);
+    else if (e.type === "dragleave") setDragActive(false);
+  };
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files?.[0]) setFile(e.dataTransfer.files[0]);
   };
 
   useEffect(() => {
     const userData = sessionStorage.getItem("user");
     const studentData = sessionStorage.getItem("student");
-
     if (userData && userData !== "undefined") {
       try {
         const parsed = JSON.parse(userData);
         setUser(parsed);
         if (parsed?._id) setStudentId(parsed._id);
-      } catch (error) {
-        console.error("Error parsing user data:", error);
-      }
+      } catch (error) { console.error("Error parsing user data:", error.message); }
     }
-
     if (studentData && studentData !== "undefined") {
       try {
         const parsed = JSON.parse(studentData);
         setStudent(parsed);
-      } catch (error) {
-        console.error("Error parsing student data:", error);
-      }
+      } catch (error) { console.error("Error parsing student data:", error.message); }
     }
   }, []);
 
   useEffect(() => {
-    if (studentId) {
-      fetchAssignments();
-      fetchEventPasses();
-    }
+    if (studentId) { fetchAssignments(); fetchEventPasses(); }
   }, [studentId]);
 
   return (
-    <div
-      className={`min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 ${
-        showQRModal ? "overflow-hidden" : ""
-      }`}
-    >
-      <div className="max-w-7xl mx-auto space-y-8">
-        <motion.header
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center"
-        >
-          <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
-            Student Dashboard
-          </h1>
-          <p className="mt-2 text-lg text-gray-600">
-            Welcome, {user?.name || "Student"}!
-          </p>
-        </motion.header>
+    <DashboardLayout role="student" activeTab={activeTab} onTabChange={setActiveTab} title={tabTitles[activeTab]} subtitle={currentSubtitle}>
+        <AnimatePresence mode="wait">
+          {activeTab === "library" && (
+            <motion.div key="library" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.25, ease: "easeOut" }} className="card p-4 sm:p-6">
+              <StudentLibrary />
+            </motion.div>
+          )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {student && (
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="lg:col-span-1"
-            >
-              <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 sticky top-8">
-                <h2 className="text-xl font-bold text-gray-800 mb-4 pb-3 border-b border-gray-200">
-                  Student Profile
-                </h2>
-
-                <div className="space-y-4">
-                  <div className="bg-blue-50 p-3 rounded-lg">
-                    <label className="block text-xs font-medium text-blue-600 uppercase tracking-wide mb-1">
-                      Name
-                    </label>
-                    <p className="text-lg font-semibold text-gray-800">
-                      {user?.name}
-                    </p>
+          {activeTab === "events" && (
+            <motion.div key="events" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.25, ease: "easeOut" }}>
+              <div className="card p-4 sm:p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                      <Ticket size={20} className="text-indigo-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900"><GradientText colors={["#6366f1", "#8b5cf6", "#6366f1"]} animationSpeed={4}>My Event Passes</GradientText></h2>
+                      <p className="text-sm text-slate-500"><CountUp from={0} to={eventPasses.length} separator="" duration={0.8} className="font-semibold" /> pass{eventPasses.length !== 1 ? "es" : ""}</p>
+                    </div>
                   </div>
-
-                  <div className="bg-purple-50 p-3 rounded-lg">
-                    <label className="block text-xs font-medium text-purple-600 uppercase tracking-wide mb-1">
-                      Email
-                    </label>
-                    <p className="text-sm font-semibold text-gray-800 truncate">
-                      {user?.email}
-                    </p>
+                  <button onClick={fetchEventPasses} disabled={loadingEvents} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition disabled:opacity-50">
+                    {loadingEvents ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                    {loadingEvents ? "Refreshing" : "Refresh"}
+                  </button>
+                </div>
+              {loadingEvents ? (
+                <div className="flex flex-col items-center py-12 text-slate-400">
+                  <Loader2 size={40} className="animate-spin text-indigo-500" />
+                  <p className="mt-4 text-sm">Loading event passes...</p>
+                </div>
+              ) : eventPasses.length === 0 ? (
+                <div className="text-center py-12 px-4 bg-slate-50/60 rounded-2xl">
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                    <Ticket size={28} />
                   </div>
+                  <h3 className="text-base font-semibold text-slate-700 mb-1">No Event Passes Yet</h3>
+                  <p className="text-sm text-slate-500">You haven't been assigned any event passes yet.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {eventPasses.map((pass, idx) => (
+                    <SpotlightCard key={pass.passId} spotlightColor="rgba(99, 102, 241, 0.15)" className="h-full">
+                    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.06 }} className="group relative bg-white border border-slate-100 rounded-2xl p-5 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+                      <div className="absolute top-0 inset-x-0 h-1 rounded-t-2xl bg-gradient-to-r from-indigo-500 to-violet-500 opacity-0 group-hover:opacity-100 transition" />
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="pr-2">
+                          <h3 className="text-base font-bold text-slate-800 leading-tight">{pass.event.title}</h3>
+                          <p className="text-xs text-slate-500 mt-0.5">{pass.event.organizer}</p>
+                        </div>
+                        <span className={`flex-shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${pass.isUsed ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}`}>
+                          {pass.isUsed ? "Used" : "Active"}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5 mb-3 text-xs text-slate-500">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar size={14} />
+                          {new Date(pass.event.date).toLocaleDateString()} at {pass.event.time}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <MapPin size={14} />
+                          {pass.event.venue}
+                        </div>
+                      </div>
+                      <p className="text-slate-600 text-xs mb-4 line-clamp-2">{pass.event.description}</p>
+                      <button
+                        onClick={() => showEventQRCode(pass)}
+                        disabled={pass.isUsed}
+                        className={`w-full py-2 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                          pass.isUsed
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-200/50 hover:shadow-lg hover:shadow-indigo-300/50"
+                        }`}
+                      >
+                        {pass.isUsed ? "Pass Used" : <><QrCode size={16} /> Show QR Code</>}
+                      </button>
+                    </motion.div>
+                    </SpotlightCard>
+                  ))}
+                </div>
+              )}
+              </div>
+            </motion.div>
+          )}
 
-                  <div className="bg-green-50 p-3 rounded-lg">
-                    <label className="block text-xs font-medium text-green-600 uppercase tracking-wide mb-1">
-                      Mobile Number
-                    </label>
-                    <p className="text-lg font-semibold text-gray-800">
-                      {student.mobile_number}
-                    </p>
-                  </div>
+          {activeTab === "upload" && (
+            <motion.div key="upload" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.25, ease: "easeOut" }} className="card p-4 sm:p-6 lg:p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                  <FileText size={20} className="text-indigo-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900"><GradientText colors={["#6366f1", "#8b5cf6", "#6366f1"]} animationSpeed={4}>Assignment Submission & Verification</GradientText></h2>
+                  <p className="text-sm text-slate-500">Upload then verify your handwriting</p>
+                </div>
+              </div>
 
-                  <div className="bg-orange-50 p-3 rounded-lg">
-                    <label className="block text-xs font-medium text-orange-600 uppercase tracking-wide mb-1">
-                      Department
-                    </label>
-                    <p className="text-lg font-semibold text-gray-800">
-                      {student.department}
-                    </p>
-                  </div>
+              <div className="mb-8">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center text-sm font-bold shadow shadow-indigo-200">1</div>
+                  <h3 className="text-lg font-semibold text-slate-800">Upload Your File</h3>
+                </div>
+                <div onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop} className="mb-4">
+                  <label className={`flex flex-col items-center justify-center w-full h-36 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-200
+                    ${dragActive ? "border-indigo-400 bg-indigo-50/60" : file ? "border-emerald-300 bg-emerald-50/40" : "border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30"}`}>
+                    <div className="flex flex-col items-center gap-2 pointer-events-none">
+                      {file ? <CheckCircle size={32} className="text-emerald-500" /> : <CloudUpload size={32} className="text-slate-400" />}
+                      <p className="text-sm text-slate-600 text-center px-3">
+                        {file ? (
+                          <span className="font-medium text-emerald-700">{file.name}</span>
+                        ) : (
+                          <><span className="font-medium text-indigo-600">Click to browse</span> or drag & drop</>
+                        )}
+                      </p>
+                    </div>
+                    <input type="file" onChange={(e) => e.target.files[0] && setFile(e.target.files[0])} className="hidden" />
+                  </label>
+                </div>
+                <button
+                  onClick={handleUpload}
+                  disabled={loading || !file}
+                  className={`w-full py-3 rounded-xl text-white font-semibold flex justify-center items-center gap-2 transition-all duration-300 ${
+                    loading || !file
+                      ? "bg-slate-300 cursor-not-allowed"
+                      : "bg-gradient-to-r from-indigo-500 to-violet-600 shadow-lg shadow-indigo-200/50 hover:shadow-xl hover:shadow-indigo-300/50 hover:-translate-y-0.5"
+                  }`}
+                >
+                  {loading ? <><Spinner /> Uploading...</> : <><Upload size={20} /> Upload Assignment</>}
+                </button>
+              </div>
 
-                  <div className="bg-red-50 p-3 rounded-lg">
-                    <label className="block text-xs font-medium text-red-600 uppercase tracking-wide mb-1">
-                      Year
-                    </label>
-                    <p className="text-lg font-semibold text-gray-800">
-                      Year {student.year}
-                    </p>
-                  </div>
+              <div className="relative my-8">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
+                <div className="relative flex justify-center"><span className="bg-white px-3 text-xs text-slate-400 uppercase tracking-wider">then</span></div>
+              </div>
 
-                  <div className="bg-indigo-50 p-3 rounded-lg">
-                    <label className="block text-xs font-medium text-indigo-600 uppercase tracking-wide mb-1">
-                      Books Allowed
-                    </label>
-                    <p className="text-lg font-semibold text-gray-800">
-                      {student.max_books_allowed}
-                    </p>
-                  </div>
-
-                  <div className="bg-teal-50 p-3 rounded-lg">
-                    <label className="block text-xs font-medium text-teal-600 uppercase tracking-wide mb-1">
-                      Event Passes
-                    </label>
-                    <p className="text-lg font-semibold text-gray-800">
-                      {loadingEvents ? "Loading..." : eventPasses.length}
-                    </p>
-                  </div>
+              <div className={`transition-all duration-500 ${isReadyForComparison ? "opacity-100" : "opacity-40"}`}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-full text-white flex items-center justify-center text-sm font-bold shadow transition-colors duration-500 ${isReadyForComparison ? "bg-gradient-to-br from-emerald-400 to-green-600 shadow-emerald-200" : "bg-slate-300"}`}>2</div>
+                  <h3 className="text-lg font-semibold text-slate-800">Verify Handwriting</h3>
+                </div>
+                <p className="text-slate-500 text-sm mb-4 ml-11">After uploading, verify your handwriting against the sample you provided.</p>
+                <div className="ml-11">
+                  {studentId && (
+                    <CompareHandwriting studentId={studentId} isReadyForComparison={isReadyForComparison} onComparisonFailed={onComparisonFailed} />
+                  )}
                 </div>
               </div>
             </motion.div>
           )}
 
-          <div className="lg:col-span-3 space-y-8">
-            {/* My Library Books Section - ADDED */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 }}
-              className="bg-white p-6 md:p-8 rounded-xl shadow-lg border border-gray-200"
-            >
-              <StudentLibrary />
-            </motion.div>
-
-            {/* Event Passes Section */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-              className="bg-white p-6 md:p-8 rounded-xl shadow-lg border border-gray-200"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">
-                  My Event Passes
-                </h2>
-                <button
-                  onClick={fetchEventPasses}
-                  disabled={loadingEvents}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
-                >
-                  {loadingEvents ? "Refreshing..." : "Refresh"}
-                </button>
-              </div>
-
-              {loadingEvents ? (
-                <div className="text-center p-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                  <p className="mt-4 text-gray-600">
-                    Loading your event passes...
-                  </p>
-                </div>
-              ) : eventPasses.length === 0 ? (
-                <div className="text-center p-8 bg-gray-50 rounded-lg">
-                  <div className="w-16 h-16 mx-auto mb-4 text-gray-400">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                      />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-700 mb-2">
-                    No Event Passes Yet
-                  </h3>
-                  <p className="text-gray-500">
-                    You haven't been assigned any event passes yet.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {eventPasses.map((pass) => (
-                    <div
-                      key={pass.passId}
-                      className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h3 className="text-xl font-bold text-gray-800">
-                            {pass.event.title}
-                          </h3>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {pass.event.organizer}
-                          </p>
-                        </div>
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            pass.isUsed
-                              ? "bg-red-100 text-red-800"
-                              : "bg-green-100 text-green-800"
-                          }`}
-                        >
-                          {pass.isUsed ? "Used" : "Active"}
-                        </span>
-                      </div>
-
-                      <div className="space-y-2 mb-4">
-                        <div className="flex items-center text-sm text-gray-600">
-                          <svg
-                            className="w-4 h-4 mr-2"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                            />
-                          </svg>
-                          {new Date(pass.event.date).toLocaleDateString()} at{" "}
-                          {pass.event.time}
-                        </div>
-                        <div className="flex items-center text-sm text-gray-600">
-                          <svg
-                            className="w-4 h-4 mr-2"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                            />
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                            />
-                          </svg>
-                          {pass.event.venue}
-                        </div>
-                      </div>
-
-                      <p className="text-gray-700 text-sm mb-4 line-clamp-2">
-                        {pass.event.description}
-                      </p>
-
-                      <button
-                        onClick={() => showEventQRCode(pass)}
-                        disabled={pass.isUsed}
-                        className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${
-                          pass.isUsed
-                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                            : "bg-blue-600 text-white hover:bg-blue-700"
-                        }`}
-                      >
-                        {pass.isUsed ? "Pass Used" : "Show QR Code"}
-                      </button>
+          {activeTab === "history" && (
+            <motion.div key="history" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.25, ease: "easeOut" }}>
+              <div className="card p-4 sm:p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                      <Clock size={20} className="text-indigo-600" />
                     </div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-
-            {/* Assignment Submission & Verification */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-              className="bg-white p-6 md:p-8 rounded-xl shadow-lg border border-gray-200"
-            >
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">
-                Assignment Submission & Verification
-              </h2>
-
-              <div className="mb-6">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-lg">
-                    1
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-700">
-                    Upload Your File
-                  </h3>
-                </div>
-                <div className="flex items-center justify-center w-full mb-4">
-                  <label className="flex flex-col w-full h-32 border-2 border-gray-300 border-dashed hover:bg-gray-100 hover:border-gray-400 transition-all rounded-lg cursor-pointer">
-                    <div className="flex flex-col items-center justify-center pt-7">
-                      <svg
-                        className="w-8 h-8 text-gray-500"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                        />
-                      </svg>
-                      <p className="pt-1 text-sm text-center text-gray-600 px-2 truncate">
-                        {file ? file.name : "Click to browse or drag & drop"}
-                      </p>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900"><GradientText colors={["#6366f1", "#8b5cf6", "#6366f1"]} animationSpeed={4}>Submission History</GradientText></h2>
+                      <p className="text-sm text-slate-500"><CountUp from={0} to={assignments.length} separator="" duration={0.8} className="font-semibold" /> submission{assignments.length !== 1 ? "s" : ""}</p>
                     </div>
-                    <input
-                      type="file"
-                      onChange={(e) =>
-                        e.target.files[0] && setFile(e.target.files[0])
-                      }
-                      className="opacity-0"
-                    />
-                  </label>
-                </div>
-                <button
-                  onClick={handleUpload}
-                  className={`w-full py-3 text-white font-semibold rounded-lg flex justify-center items-center gap-2 transition-all duration-300 ${
-                    loading || !file
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl"
-                  }`}
-                  disabled={loading || !file}
-                >
-                  {loading ? "Uploading..." : "Upload Assignment"}
-                </button>
-              </div>
-
-              <hr className="my-8 border-gray-200" />
-
-              <div
-                className={`transition-all duration-500 ${
-                  isReadyForComparison ? "opacity-100" : "opacity-50"
-                }`}
-              >
-                <div className="flex items-center gap-4 mb-4">
-                  <div
-                    className={`flex-shrink-0 w-8 h-8 text-white rounded-full flex items-center justify-center font-bold text-lg transition-colors duration-500 ${
-                      isReadyForComparison ? "bg-green-600" : "bg-gray-400"
-                    }`}
-                  >
-                    2
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-700">
-                    Verify Handwriting
-                  </h3>
+                  <button onClick={fetchAssignments} disabled={isFetching} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition disabled:opacity-50">
+                    {isFetching ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                    {isFetching ? "Refreshing" : "Refresh"}
+                  </button>
                 </div>
-                <p className="text-gray-600 text-sm mb-4 ml-12">
-                  After uploading an assignment, you can verify your handwriting
-                  against the sample you provided.
-                </p>
-                <div className="ml-12">
-                  {studentId && (
-                    <CompareHandwriting
-                      studentId={studentId}
-                      isReadyForComparison={isReadyForComparison}
-                      onComparisonFailed={onComparisonFailed}
-                    />
-                  )}
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Assignments History Table */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4 }}
-              className="bg-white p-6 md:p-8 rounded-xl shadow-lg border border-gray-200"
-            >
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-2xl font-bold text-gray-800">
-                  Submission History
-                </h3>
-                <button
-                  onClick={fetchAssignments}
-                  className="text-sm font-medium text-blue-600 hover:underline"
-                  disabled={isFetching}
-                >
-                  {isFetching ? "Refreshing..." : "Refresh"}
-                </button>
-              </div>
               {isFetching ? (
-                <div className="text-center p-8 text-gray-500">
-                  Loading assignments...
+                <div className="flex flex-col items-center py-12 text-slate-400">
+                  <Loader2 size={40} className="animate-spin text-indigo-500" />
+                  <p className="mt-4 text-sm">Loading submissions...</p>
                 </div>
               ) : assignments.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Assignment
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Submitted
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Marks
-                        </th>
+                <div className="overflow-x-auto rounded-xl border border-slate-100">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50/80">
+                        <th className="px-5 py-3 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">Assignment</th>
+                        <th className="px-5 py-3 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">Submitted</th>
+                        <th className="px-5 py-3 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                        <th className="px-5 py-3 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">Marks</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-slate-100">
                       {assignments.map((assignment) => (
-                        <tr key={assignment._id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 font-medium text-gray-900">
-                            {assignment.fileName}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">
-                            {new Date(
-                              assignment.uploadDate
-                            ).toLocaleDateString()}
-                          </td>
-                          <td className="px-6 py-4">
+                        <tr key={assignment._id} className="hover:bg-indigo-50/30 transition-colors">
+                          <td className="px-5 py-4 font-medium text-slate-800">{assignment.fileName}</td>
+                          <td className="px-5 py-4 text-slate-500">{new Date(assignment.uploadDate).toLocaleDateString()}</td>
+                          <td className="px-5 py-4">
                             {assignment.marks ? (
-                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                Graded
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-50 text-emerald-700">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Graded
                               </span>
                             ) : (
-                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                                Pending
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-amber-50 text-amber-700">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Pending
                               </span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-sm font-bold text-gray-700">
-                            {assignment.marks || "-"}
-                          </td>
+                          <td className="px-5 py-4 font-bold text-slate-700">{assignment.marks || "—"}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="text-center p-8 bg-gray-50 rounded-lg">
-                  <h4 className="text-lg font-medium text-gray-700">
-                    No assignments submitted yet
-                  </h4>
-                  <p className="mt-1 text-gray-500">
-                    Upload your first assignment to see it here.
-                  </p>
+                <div className="text-center py-12 px-4 bg-slate-50/60 rounded-2xl">
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                    <FileText size={28} />
+                  </div>
+                  <h4 className="text-base font-semibold text-slate-700 mb-1">No Assignments Yet</h4>
+                  <p className="text-sm text-slate-500">Upload your first assignment to see it here.</p>
                 </div>
               )}
-            </motion.div>
-          </div>
-        </div>
-
-        {showQRModal && selectedEvent && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-0"
-          >
-            <div
-              className="absolute inset-0  bg-opacity-30 backdrop-blur-sm min-h-screen"
-              onClick={closeQRModal}
-            />
-
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ type: "spring", damping: 25 }}
-              className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm mx-auto"
-            >
-              <button
-                onClick={closeQRModal}
-                className="absolute -top-2 -right-2 z-10 bg-white rounded-full p-1 shadow-lg hover:bg-gray-100 transition-colors"
-              >
-                <svg
-                  className="w-5 h-5 text-gray-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-
-              <div className="p-4">
-                <div className="text-center mb-4">
-                  <h3 className="text-xl font-bold text-gray-800 mb-1">
-                    Event Pass
-                  </h3>
-                  <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-1 w-16 mx-auto rounded-full"></div>
-                </div>
-                <div className="text-center mb-4">
-                  <h4 className="text-md font-semibold text-gray-800 mb-1">
-                    {selectedEvent.event.title}
-                  </h4>
-                  <p className="text-xs text-gray-600 mb-1">
-                    {new Date(
-                      selectedEvent.event.date
-                    ).toLocaleDateString()} at {selectedEvent.event.time}
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    {selectedEvent.event.venue}
-                  </p>
-                </div>
-                <div className="bg-white p-4 rounded-lg border-2 border-gray-100 mb-4">
-                  <QRCodeSVG
-                    value={selectedEvent.qrCode}
-                    size={200}
-                    level="H"
-                    includeMargin={true}
-                    className="mx-auto"
-                  />
-                </div>
-                <div className="flex justify-center mb-3">
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      selectedEvent.isUsed
-                        ? "bg-red-100 text-red-800 border border-red-200"
-                        : "bg-green-100 text-green-800 border border-green-200"
-                    }`}
-                  >
-                    {selectedEvent.isUsed ? "Pass Used" : "Active Pass"}
-                  </span>
-                </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                  <p className="text-xs text-blue-700 text-center">
-                    <strong>How to use:</strong> Show QR code at event entrance
-                  </p>
-                </div>
-                {selectedEvent.isUsed && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-2">
-                    <p className="text-xs font-medium text-red-700 text-center">
-                      Used on {new Date(selectedEvent.usedAt).toLocaleString()}
-                    </p>
-                  </div>
-                )}
               </div>
             </motion.div>
-          </motion.div>
-        )}
+          )}
+        </AnimatePresence>
 
-        <ToastContainer
-          position="bottom-right"
-          autoClose={4000}
-          theme="colored"
-        />
-      </div>
-    </div>
+        <AnimatePresence>
+          {showQRModal && selectedEvent && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={closeQRModal} />
+              <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} transition={{ type: "spring", damping: 25, stiffness: 300 }} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+                <div className="h-1.5 bg-gradient-to-r from-indigo-500 to-purple-600" />
+                <button onClick={closeQRModal} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors">
+                  <X size={16} className="text-slate-500" />
+                </button>
+                <div className="p-6">
+                  <div className="text-center mb-5">
+                    <h3 className="text-lg font-bold text-slate-800">Event Pass</h3>
+                    <p className="text-sm font-medium text-slate-600 mt-1">{selectedEvent.event.title}</p>
+                    <div className="flex items-center justify-center gap-3 mt-2 text-xs text-slate-500">
+                      <span>{new Date(selectedEvent.event.date).toLocaleDateString()} at {selectedEvent.event.time}</span>
+                      <span>&middot;</span>
+                      <span>{selectedEvent.event.venue}</span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 mb-5">
+                    <QRCodeSVG value={selectedEvent.qrCode} size={200} level="H" includeMargin={true} className="mx-auto" />
+                  </div>
+                  <div className="flex justify-center mb-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${selectedEvent.isUsed ? "bg-rose-50 text-rose-600 border border-rose-100" : "bg-emerald-50 text-emerald-600 border border-emerald-100"}`}>
+                      {selectedEvent.isUsed ? "Pass Used" : "Active Pass"}
+                    </span>
+                  </div>
+                  <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 mb-3">
+                    <p className="text-xs text-indigo-600 text-center"><strong>How to use:</strong> Show this QR code at the event entrance</p>
+                  </div>
+                  {selectedEvent.isUsed && (
+                    <div className="bg-rose-50 border border-rose-100 rounded-xl p-2.5">
+                      <p className="text-xs font-medium text-rose-600 text-center">Used on {new Date(selectedEvent.usedAt).toLocaleString()}</p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </DashboardLayout>
   );
 };
 

@@ -1,10 +1,11 @@
 const express = require("express");
 const { authMiddleware } = require("../middleware/authMiddleware");
+const { requireRole } = require("../middleware/roleMiddleware");
 const studentEventController = require("../controllers/studentEventController");
 const router = express.Router();
 
-// All routes require authentication
-router.use(authMiddleware);
+// All routes require student authentication
+router.use(authMiddleware, requireRole("student"));
 
 // Student event management routes
 router.get("/passes", studentEventController.getStudentEventPasses);

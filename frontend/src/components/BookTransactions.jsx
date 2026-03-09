@@ -1,26 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Chip,
-  TextField,
-  MenuItem,
-  Typography,
-  Pagination,
-  CircularProgress,
-  Alert,
-  Tooltip,
-  IconButton
-} from '@mui/material';
+import { Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, TextField, MenuItem, Typography, Pagination, CircularProgress, Alert, Tooltip, IconButton } from '@mui/material';
 import { Refresh, Person, Book } from '@mui/icons-material';
 import axios from 'axios';
-
+import { API_BASE_URL } from '../config';
 const BookTransactions = () => {
   const [transactions, setTransactions] = useState([]);
   const [studentDetails, setStudentDetails] = useState({});
@@ -34,9 +16,6 @@ const BookTransactions = () => {
     total: 0
   });
   const [error, setError] = useState('');
-
-  const API_BASE_URL = 'http://localhost:5000';
-
   const fetchStudentDetails = async (studentId) => {
     try {
       const token = sessionStorage.getItem("authToken");
@@ -51,17 +30,12 @@ const BookTransactions = () => {
       return null;
     }
   };
-
   const fetchTransactions = async (page = 1) => {
     setLoading(true);
     setError('');
     try {
       const token = sessionStorage.getItem("authToken");
-      
-      if (!token) {
-        setError('Please login again');
-        return;
-      }
+      if (!token) { setError('Please login again'); return; }
 
       const response = await axios.get(`${API_BASE_URL}/api/library/transactions`, {
         headers: { 
@@ -70,7 +44,6 @@ const BookTransactions = () => {
         },
         params: { ...filters, page, limit: 10 }
       });
-      
       const transactionsData = response.data?.transactions || [];
       setTransactions(transactionsData);
       setPagination({
@@ -79,18 +52,21 @@ const BookTransactions = () => {
       });
 
       const studentDetailsMap = {};
+      const fetchPromises = [];
       for (const transaction of transactionsData) {
         if (transaction.student && typeof transaction.student === 'string') {
-          const studentData = await fetchStudentDetails(transaction.student);
-          if (studentData) {
-            studentDetailsMap[transaction.student] = studentData;
-          }
+          const studentId = transaction.student;
+          fetchPromises.push(
+            fetchStudentDetails(studentId).then(studentData => {
+              if (studentData) studentDetailsMap[studentId] = studentData;
+            })
+          );
         } else if (transaction.student && transaction.student._id) {
           studentDetailsMap[transaction.student._id] = transaction.student;
         }
       }
+      await Promise.all(fetchPromises);
       setStudentDetails(studentDetailsMap);
-
     } catch (error) {
       if (error.response?.status === 401) {
         setError('Session expired. Please login again.');
@@ -102,20 +78,12 @@ const BookTransactions = () => {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchTransactions(1);
-  }, [filters.status]);
-
-  const handleRefresh = () => {
-    fetchTransactions(filters.page);
-  };
-
+  useEffect(() => { fetchTransactions(1); }, [filters.status]);
+  const handleRefresh = () => { fetchTransactions(filters.page); };
   const handlePageChange = (event, value) => {
     setFilters(prev => ({ ...prev, page: value }));
     fetchTransactions(value);
   };
-
   const getStatusColor = (status) => {
     switch (status) {
       case 'issued': return 'warning';
@@ -124,21 +92,11 @@ const BookTransactions = () => {
       default: return 'default';
     }
   };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString();
-  };
-
-  const isOverdue = (dueDate, status) => {
-    return status === 'issued' && new Date(dueDate) < new Date();
-  };
-
+  const formatDate = (dateString) => new Date(dateString).toLocaleDateString();
+  const isOverdue = (dueDate, status) => status === 'issued' && new Date(dueDate) < new Date();
   const getStudentInfo = (transaction) => {
     let student = transaction.student;
-    
-    if (typeof student === 'string' && studentDetails[student]) {
-      student = studentDetails[student];
-    }
+    if (typeof student === 'string' && studentDetails[student]) student = studentDetails[student];
 
     if (!student) {
       return { 
@@ -152,11 +110,10 @@ const BookTransactions = () => {
     const name = student.user?.name || student.name || 'Unknown Student';
     const department = student.department || 'Not Specified';
     const year = student.year || student.academic_year || 'N/A';
-    const id = student._id || typeof transaction.student === 'string' ? transaction.student : 'unknown';
+    const id = student._id || (typeof transaction.student === 'string' ? transaction.student : 'unknown');
 
     return { name, department, year, id };
   };
-
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -164,26 +121,17 @@ const BookTransactions = () => {
           📚 Book Transactions History
         </Typography>
         <Tooltip title="Refresh transactions">
-          <IconButton 
-            onClick={handleRefresh} 
-            color="primary" 
-            disabled={loading}
-            sx={{ 
-              backgroundColor: 'primary.light', 
-              '&:hover': { backgroundColor: 'primary.main', color: 'white' } 
-            }}
-          >
+          <IconButton onClick={handleRefresh} color="primary" disabled={loading}
+            sx={{ backgroundColor: 'primary.light', '&:hover': { backgroundColor: 'primary.main', color: 'white' } }}>
             <Refresh />
           </IconButton>
         </Tooltip>
       </Box>
-
       {error && (
         <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
           {error}
         </Alert>
       )}
-
       <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <TextField
           select
@@ -198,35 +146,14 @@ const BookTransactions = () => {
           <MenuItem value="returned">Returned</MenuItem>
           <MenuItem value="overdue">Overdue</MenuItem>
         </TextField>
-        
-        <Chip 
-          icon={<Person />} 
-          label={`${transactions.length} transactions`} 
-          variant="outlined" 
-          color="primary" 
-        />
+        <Chip icon={<Person />} label={`${transactions.length} transactions`} variant="outlined" color="primary" />
       </Box>
-
-      <TableContainer 
-        component={Paper} 
-        sx={{ 
-          borderRadius: 2,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.08)'
-        }}
-      >
+      <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
         <Table>
           <TableHead sx={{ backgroundColor: 'grey.50' }}>
             <TableRow>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '1rem' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Person /> Student Information
-                </Box>
-              </TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '1rem' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Book /> Book Details
-                </Box>
-              </TableCell>
+              <TableCell sx={{ fontWeight: 'bold', fontSize: '1rem' }}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Person /> Student Information</Box></TableCell>
+              <TableCell sx={{ fontWeight: 'bold', fontSize: '1rem' }}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Book /> Book Details</Box></TableCell>
               <TableCell sx={{ fontWeight: 'bold', fontSize: '1rem' }}>Issue Date</TableCell>
               <TableCell sx={{ fontWeight: 'bold', fontSize: '1rem' }}>Due Date</TableCell>
               <TableCell sx={{ fontWeight: 'bold', fontSize: '1rem' }}>Return Date</TableCell>
@@ -261,110 +188,50 @@ const BookTransactions = () => {
                 const isStudentDataComplete = studentInfo.name !== 'Unknown Student' && studentInfo.year !== 'N/A';
                 
                 return (
-                  <TableRow 
-                    key={transaction._id}
-                    sx={{ 
-                      '&:hover': { 
-                        backgroundColor: 'action.hover',
-                        transition: 'background-color 0.2s ease'
-                      },
-                      backgroundColor: !isStudentDataComplete ? 'warning.light' : 'inherit'
-                    }}
-                  >
+                  <TableRow key={transaction._id}
+                    sx={{ '&:hover': { backgroundColor: 'action.hover', transition: 'background-color 0.2s ease' }, backgroundColor: !isStudentDataComplete ? 'warning.light' : 'inherit' }}>
                     <TableCell>
                       <Tooltip title={!isStudentDataComplete ? "Student data needs population" : `ID: ${studentInfo.id}`} arrow>
                         <Box>
-                          <Typography 
-                            variant="subtitle1" 
-                            fontWeight="bold" 
-                            color={isStudentDataComplete ? "primary" : "warning.dark"}
-                          >
-                            {studentInfo.name}
-                            {!isStudentDataComplete && " ⚠️"}
+                          <Typography variant="subtitle1" fontWeight="bold" color={isStudentDataComplete ? "primary" : "warning.dark"}>
+                            {studentInfo.name}{!isStudentDataComplete && " ⚠️"}
                           </Typography>
-                          <Typography variant="caption" color="textSecondary" display="block">
-                            🎓 {studentInfo.department}
-                          </Typography>
-                          <Typography variant="caption" color="textSecondary">
-                            📅 Year {studentInfo.year}
-                          </Typography>
+                          <Typography variant="caption" color="textSecondary" display="block">🎓 {studentInfo.department}</Typography>
+                          <Typography variant="caption" color="textSecondary">📅 Year {studentInfo.year}</Typography>
                         </Box>
                       </Tooltip>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="subtitle2" fontWeight="bold">
-                        {transaction.book?.title || 'Unknown Book'}
-                      </Typography>
-                      <Typography variant="caption" color="textSecondary" display="block">
-                        ✍️ by {transaction.book?.author || 'Unknown Author'}
-                      </Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        🔢 ISBN: {transaction.book?.isbn || 'N/A'}
-                      </Typography>
+                      <Typography variant="subtitle2" fontWeight="bold">{transaction.book?.title || 'Unknown Book'}</Typography>
+                      <Typography variant="caption" color="textSecondary" display="block">✍️ by {transaction.book?.author || 'Unknown Author'}</Typography>
+                      <Typography variant="caption" color="textSecondary">🔢 ISBN: {transaction.book?.isbn || 'N/A'}</Typography>
                     </TableCell>
                     <TableCell>
-                      <Chip 
-                        label={formatDate(transaction.issue_date)} 
-                        size="small" 
-                        variant="outlined"
-                        color="primary"
-                      />
+                      <Chip label={formatDate(transaction.issue_date)} size="small" variant="outlined" color="primary" />
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Chip 
-                          label={formatDate(transaction.due_date)} 
-                          size="small" 
-                          variant="outlined"
-                          color={isOverdue(transaction.due_date, transaction.status) ? "error" : "default"}
-                        />
+                        <Chip label={formatDate(transaction.due_date)} size="small" variant="outlined" color={isOverdue(transaction.due_date, transaction.status) ? "error" : "default"} />
                         {isOverdue(transaction.due_date, transaction.status) && (
-                          <Chip 
-                            label="Overdue" 
-                            color="error" 
-                            size="small" 
-                            variant="filled"
-                          />
+                          <Chip label="Overdue" color="error" size="small" variant="filled" />
                         )}
                       </Box>
                     </TableCell>
                     <TableCell>
                       {transaction.return_date ? (
-                        <Chip 
-                          label={formatDate(transaction.return_date)} 
-                          size="small" 
-                          variant="outlined"
-                          color="success"
-                        />
+                        <Chip label={formatDate(transaction.return_date)} size="small" variant="outlined" color="success" />
                       ) : (
-                        <Typography variant="body2" color="textSecondary" fontStyle="italic">
-                          Not returned
-                        </Typography>
+                        <Typography variant="body2" color="textSecondary" fontStyle="italic">Not returned</Typography>
                       )}
                     </TableCell>
                     <TableCell>
-                      <Typography 
-                        variant="body1"
-                        color={transaction.fine_amount > 0 ? "error" : "textSecondary"}
-                        fontWeight={transaction.fine_amount > 0 ? "bold" : "normal"}
-                        sx={{ 
-                          backgroundColor: transaction.fine_amount > 0 ? 'error.light' : 'transparent',
-                          px: 1,
-                          py: 0.5,
-                          borderRadius: 1,
-                          display: 'inline-block'
-                        }}
-                      >
+                      <Typography variant="body1" color={transaction.fine_amount > 0 ? "error" : "textSecondary"} fontWeight={transaction.fine_amount > 0 ? "bold" : "normal"}
+                        sx={{ backgroundColor: transaction.fine_amount > 0 ? 'error.light' : 'transparent', px: 1, py: 0.5, borderRadius: 1, display: 'inline-block' }}>
                         ₹{transaction.fine_amount}
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Chip 
-                        label={transaction.status.toUpperCase()} 
-                        color={getStatusColor(transaction.status)}
-                        size="small"
-                        sx={{ fontWeight: 'bold' }}
-                      />
+                      <Chip label={transaction.status.toUpperCase()} color={getStatusColor(transaction.status)} size="small" sx={{ fontWeight: 'bold' }} />
                     </TableCell>
                   </TableRow>
                 );
@@ -373,7 +240,6 @@ const BookTransactions = () => {
           </TableBody>
         </Table>
       </TableContainer>
-
       {pagination.totalPages > 1 && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
           <Pagination
@@ -385,19 +251,9 @@ const BookTransactions = () => {
           />
         </Box>
       )}
-
       <Box sx={{ mt: 3 }}>
-        <Alert 
-          severity="info" 
-          sx={{ 
-            borderRadius: 2,
-            backgroundColor: 'info.light',
-            color: 'info.dark'
-          }}
-        >
-          <Typography variant="subtitle2" fontWeight="bold">
-            📊 Library Statistics
-          </Typography>
+        <Alert severity="info" sx={{ borderRadius: 2, backgroundColor: 'info.light', color: 'info.dark' }}>
+          <Typography variant="subtitle2" fontWeight="bold">📊 Library Statistics</Typography>
           Total Transactions: <strong>{pagination.total}</strong> • 
           Currently Showing: <strong>{transactions.length}</strong> records
           {Object.keys(studentDetails).length > 0 && (
@@ -408,5 +264,4 @@ const BookTransactions = () => {
     </Box>
   );
 };
-
 export default BookTransactions;

@@ -8,7 +8,11 @@ const studentSchema = new mongoose.Schema(
       required: true,
       unique: true
     },
-    mobile_number: { type: String, required: true },
+    mobile_number: { 
+      type: String, 
+      required: true,
+      match: [/^\d{10,15}$/, 'Mobile number must be 10-15 digits']
+    },
     department: { type: String, required: true },
     year: { type: Number, required: true },
     digital_id_qr: { type: String },

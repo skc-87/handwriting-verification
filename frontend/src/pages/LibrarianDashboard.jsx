@@ -1,86 +1,91 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  Box,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Tabs,
-  Tab,
-  Paper,
-  Alert,
-  CircularProgress
-} from '@mui/material';
-import {
-  LibraryBooks,
-  ImportContacts,
-  Schedule,
-  ReceiptLong,
-  TrendingUp,
-  LocalLibrary
-} from '@mui/icons-material';
-import ManageBooks from '../components/ManageBooks';
-import IssueReturnBooks from '../components/IssueReturnBooks';
-import ViewBooks from '../components/ViewBooks';
-import BookTransactions from '../components/BookTransactions';
-import axios from 'axios';
+  BookOpen,
+  BookMarked,
+  Clock,
+  ArrowLeftRight,
+} from "lucide-react";
+import ManageBooks from "../components/ManageBooks";
+import IssueReturnBooks from "../components/IssueReturnBooks";
+import ViewBooks from "../components/ViewBooks";
+import BookTransactions from "../components/BookTransactions";
+import DashboardLayout from "../components/DashboardLayout";
+import axios from "axios";
+import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../config";
+import { CountUp, SpotlightCard } from "../components/reactbits";
 
-// Tab panel component
-function TabPanel({ children, value, index, ...other }) {
+const StatCard = ({ title, value, icon: Icon, color, subtitle, loading }) => {
+  const colors = {
+    indigo: { bg: "bg-indigo-50", text: "text-indigo-600", ring: "ring-indigo-100", spotlight: "rgba(79, 70, 229, 0.12)" },
+    violet: { bg: "bg-violet-50", text: "text-violet-600", ring: "ring-violet-100", spotlight: "rgba(139, 92, 246, 0.12)" },
+    rose: { bg: "bg-rose-50", text: "text-rose-600", ring: "ring-rose-100", spotlight: "rgba(244, 63, 94, 0.12)" },
+    cyan: { bg: "bg-cyan-50", text: "text-cyan-600", ring: "ring-cyan-100", spotlight: "rgba(6, 182, 212, 0.12)" },
+  };
+  const c = colors[color] || colors.indigo;
+
   return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`tabpanel-${index}`}
-      aria-labelledby={`tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
+    <SpotlightCard spotlightColor={c.spotlight} className="p-5">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">{title}</p>
+          <p className="text-3xl font-extrabold text-slate-900 leading-none">
+            {loading ? (
+              <span className="inline-block w-12 h-8 rounded-lg shimmer" />
+            ) : (
+              <CountUp
+                to={typeof value === 'number' ? value : parseInt(value) || 0}
+                from={0}
+                duration={1.5}
+                className="text-3xl font-extrabold text-slate-900"
+                separator=","
+              />
+            )}
+          </p>
+          {subtitle && <p className="text-xs text-slate-500 mt-1.5">{subtitle}</p>}
+        </div>
+        <div className={`w-12 h-12 rounded-2xl ${c.bg} ring-1 ${c.ring} flex items-center justify-center`}>
+          <Icon size={22} className={c.text} />
+        </div>
+      </div>
+    </SpotlightCard>
   );
-}
+};
 
 const LibrarianDashboard = () => {
+  const { user } = useAuth();
   const [tabValue, setTabValue] = useState(0);
   const [stats, setStats] = useState({
     totalBooks: 0,
     issuedBooks: 0,
     overdueBooks: 0,
-    totalTransactions: 0
+    totalTransactions: 0,
   });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const handleTabChange = (event, newValue) => {
-    setTabValue(newValue);
-  };
-
-  // Fetch library statistics
+  const [error, setError] = useState("");
   const fetchStats = async () => {
     setLoading(true);
-    setError('');
+    setError("");
     try {
       const token = sessionStorage.getItem("authToken");
-      
       if (!token) {
-        setError('Please login again');
+        setError("Please login again");
         return;
       }
-
-      const API_BASE_URL = 'http://localhost:5000';
       const response = await axios.get(`${API_BASE_URL}/api/library/stats`, {
-        headers: { 
+        headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+          "Content-Type": "application/json",
+        },
       });
       setStats(response.data);
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-      if (error.response?.status === 401) {
-        setError('Session expired. Please login again.');
+    } catch (err) {
+      console.error("Error fetching stats:", err.message);
+      if (err.response?.status === 401) {
+        setError("Session expired. Please login again.");
       } else {
-        setError('Failed to load library statistics');
+        setError("Failed to load library statistics");
       }
     } finally {
       setLoading(false);
@@ -91,222 +96,63 @@ const LibrarianDashboard = () => {
     fetchStats();
   }, []);
 
-  const StatCard = ({ title, value, icon, color, subtitle }) => (
-    <Card 
-      sx={{ 
-        background: `linear-gradient(135deg, ${color} 0%, ${color}dd 100%)`,
-        color: 'white',
-        borderRadius: 3,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-        transition: 'all 0.3s ease',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: '0 12px 40px rgba(0,0,0,0.15)'
-        }
-      }}
-    >
-      <CardContent sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <Box>
-            <Typography variant="h6" sx={{ opacity: 0.9, mb: 1, fontSize: '0.9rem' }}>
-              {title}
-            </Typography>
-            <Typography variant="h3" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-              {loading ? '--' : value}
-            </Typography>
-            {subtitle && (
-              <Typography variant="body2" sx={{ opacity: 0.8, fontSize: '0.8rem' }}>
-                {subtitle}
-              </Typography>
-            )}
-          </Box>
-          <Box
-            sx={{
-              background: 'rgba(255,255,255,0.2)',
-              borderRadius: 2,
-              p: 1.5,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            {icon}
-          </Box>
-        </Box>
-      </CardContent>
-    </Card>
-  );
+  const tabTitles = [
+    "Browse Books",
+    "Manage Books",
+    "Issue & Return",
+    "Transactions",
+  ];
+
+  const tabSubtitles = [
+    "Search and explore the library catalog",
+    "Add, edit, and organize your book collection",
+    "Issue and process book returns",
+    "View all borrowing history and records",
+  ];
 
   return (
-    <Box sx={{ flexGrow: 1, p: 3, background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)', minHeight: '100vh' }}>
-      {/* Header */}
-      <Box sx={{ mb: 4, textAlign: 'center' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
-          <LocalLibrary sx={{ fontSize: 48, color: 'primary.main', mr: 2 }} />
-          <Typography 
-            variant="h3" 
-            sx={{ 
-              fontWeight: 'bold',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              backgroundClip: 'text',
-              WebkitBackgroundClip: 'text',
-              color: 'transparent'
-            }}
-          >
-            Library Management System
-          </Typography>
-        </Box>
-        <Typography variant="h6" color="text.secondary" sx={{ opacity: 0.8 }}>
-          Manage books, track transactions, and oversee library operations
-        </Typography>
-      </Box>
+    <DashboardLayout
+      role="librarian"
+      activeTab={tabValue}
+      onTabChange={setTabValue}
+      title={tabTitles[tabValue]}
+      subtitle={tabSubtitles[tabValue]}
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+        <StatCard title="Total Books" value={stats.totalBooks} icon={BookOpen} color="indigo" subtitle="In collection" loading={loading} />
+        <StatCard title="Books Issued" value={stats.issuedBooks} icon={BookMarked} color="violet" subtitle="Currently borrowed" loading={loading} />
+        <StatCard title="Overdue" value={stats.overdueBooks} icon={Clock} color="rose" subtitle="Need attention" loading={loading} />
+        <StatCard title="Transactions" value={stats.totalTransactions} icon={ArrowLeftRight} color="cyan" subtitle="All time records" loading={loading} />
+      </div>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
+        <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium">
           {error}
-        </Alert>
+        </div>
       )}
-
-      {/* Statistics Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <StatCard
-            title="Total Books"
-            value={stats.totalBooks}
-            icon={<LibraryBooks sx={{ fontSize: 28, color: 'white' }} />}
-            color="#667eea"
-            subtitle="In collection"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <StatCard
-            title="Books Issued"
-            value={stats.issuedBooks}
-            icon={<ImportContacts sx={{ fontSize: 28, color: 'white' }} />}
-            color="#f093fb"
-            subtitle="Currently borrowed"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <StatCard
-            title="Overdue Books"
-            value={stats.overdueBooks}
-            icon={<Schedule sx={{ fontSize: 28, color: 'white' }} />}
-            color="#f5576c"
-            subtitle="Need attention"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <StatCard
-            title="Total Transactions"
-            value={stats.totalTransactions}
-            icon={<ReceiptLong sx={{ fontSize: 28, color: 'white' }} />}
-            color="#4facfe"
-            subtitle="All time records"
-          />
-        </Grid>
-      </Grid>
-
-      {/* Quick Actions Bar */}
-      <Paper 
-        sx={{ 
-          p: 2, 
-          mb: 3, 
-          borderRadius: 3,
-          background: 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.08)'
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <TrendingUp sx={{ color: 'primary.main', mr: 1 }} />
-          <Typography variant="h6" sx={{ fontWeight: 'bold', flexGrow: 1 }}>
-            Quick Actions
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Select a tab below to manage different library operations
-          </Typography>
-        </Box>
-      </Paper>
-
-      {/* Tabs Navigation */}
-      <Paper 
-        sx={{ 
-          width: '100%', 
-          mb: 2, 
-          borderRadius: 3,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.08)'
-        }}
-      >
-        <Tabs
-          value={tabValue}
-          onChange={handleTabChange}
-          indicatorColor="primary"
-          textColor="primary"
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            '& .MuiTab-root': {
-              fontWeight: 'bold',
-              fontSize: '1rem',
-              py: 2,
-              minHeight: 'auto',
-              '&.Mui-selected': {
-                color: 'primary.main',
-              }
-            }
-          }}
-        >
-          <Tab 
-            icon={<LibraryBooks sx={{ fontSize: 20, mr: 1 }} />} 
-            iconPosition="start" 
-            label="Browse Books" 
-          />
-          <Tab 
-            icon={<ImportContacts sx={{ fontSize: 20, mr: 1 }} />} 
-            iconPosition="start" 
-            label="Manage Books" 
-          />
-          <Tab 
-            icon={<ReceiptLong sx={{ fontSize: 20, mr: 1 }} />} 
-            iconPosition="start" 
-            label="Issue & Return" 
-          />
-          <Tab 
-            icon={<Schedule sx={{ fontSize: 20, mr: 1 }} />} 
-            iconPosition="start" 
-            label="Transactions" 
-          />
-        </Tabs>
-      </Paper>
-
-      {/* Loading State */}
-      {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
-          <CircularProgress size={60} thickness={4} />
-        </Box>
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-16">
+          <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+          <p className="mt-4 text-sm text-slate-500">Loading library data...</p>
+        </div>
+      ) : (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={tabValue}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="card p-4 sm:p-6"
+          >
+            {tabValue === 0 && <ViewBooks onStatsUpdate={fetchStats} />}
+            {tabValue === 1 && <ManageBooks onStatsUpdate={fetchStats} />}
+            {tabValue === 2 && <IssueReturnBooks onStatsUpdate={fetchStats} />}
+            {tabValue === 3 && <BookTransactions onStatsUpdate={fetchStats} />}
+          </motion.div>
+        </AnimatePresence>
       )}
-
-      {/* Tab Content - Only show when not loading */}
-      {!loading && (
-        <>
-          <TabPanel value={tabValue} index={0}>
-            <ViewBooks onStatsUpdate={fetchStats} />
-          </TabPanel>
-          
-          <TabPanel value={tabValue} index={1}>
-            <ManageBooks onStatsUpdate={fetchStats} />
-          </TabPanel>
-          
-          <TabPanel value={tabValue} index={2}>
-            <IssueReturnBooks onStatsUpdate={fetchStats} />
-          </TabPanel>
-          
-          <TabPanel value={tabValue} index={3}>
-            <BookTransactions onStatsUpdate={fetchStats} />
-          </TabPanel>
-        </>
-      )}
-    </Box>
+    </DashboardLayout>
   );
 };
 

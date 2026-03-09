@@ -49,4 +49,18 @@ backend/temp/
 /embeddings/
 /attendance/
 
+
+# Python
+# ----------------------------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pth
+
+
+# Model & Face Recognition Data
+# ----------------------------------------------------------------
+/model_for_face/registered_students.csv
+/model_for_face/attendance.csv
+
 backend/.env

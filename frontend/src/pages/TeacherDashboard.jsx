@@ -1,38 +1,39 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { motion, AnimatePresence } from "framer-motion";
+import { Search } from "lucide-react";
 import FileUploadForm from "../components/FileUploadForm";
 import HandwritingSamplesTable from "../components/HandwritingSamplesTable";
 import AssignmentsTable from "../components/AssignmentsTable";
 import FaceRegistrationModule from "../components/FaceRegistrationModule";
 import ClassAttendanceModule from "../components/ClassAttendanceModule";
 import EventManager from "../components/EventManager";
-
-// Icon components for tabs
-const CalendarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" /></svg>;
-const UserAddIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 11a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1v-1z" /></svg>;
-const CollectionIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1z" /></svg>;
-const EventIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" /></svg>;
+import DashboardLayout from "../components/DashboardLayout";
+import { API_BASE_URL } from "../config";
+import { useAuth } from "../context/AuthContext";
+import { GradientText } from "../components/reactbits";
 
 const TeacherDashboard = () => {
-  const API_BASE_URL = "http://localhost:5000/api/files";
-  const FACE_API_URL = "http://localhost:5000/api/model";
-  const EVENT_API_URL = "http://localhost:5000/api";
-  
+  const FILES_API_URL = `${API_BASE_URL}/api/files`;
+  const FACE_API_URL = `${API_BASE_URL}/api/model`;
+  const EVENT_API_URL = `${API_BASE_URL}/api`;
+
   const [handwritingSamples, setHandwritingSamples] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [activeTab, setActiveTab] = useState("attendance");
+  const { user } = useAuth();
 
   const token = sessionStorage.getItem("authToken");
 
   const handleEvaluate = async (fileId, marks) => {
     try {
       await axios.put(
-        `${API_BASE_URL}/evaluate/${fileId}`,
+        `${FILES_API_URL}/evaluate/${fileId}`,
         { marks },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -55,7 +56,7 @@ const TeacherDashboard = () => {
     formData.append("studentName", studentName);
     setIsUploading(true);
     try {
-      await axios.post(`${API_BASE_URL}/upload/teacher`, formData, {
+      await axios.post(`${FILES_API_URL}/upload/teacher`, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
           Authorization: `Bearer ${token}`,
@@ -73,7 +74,7 @@ const TeacherDashboard = () => {
   const fetchFiles = async () => {
     setIsLoading(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/all-files`, {
+      const res = await axios.get(`${FILES_API_URL}/all-files`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setHandwritingSamples(res.data.handwritingSamples || []);
@@ -89,108 +90,108 @@ const TeacherDashboard = () => {
     fetchFiles();
   }, [token]);
 
-  const TabButton = ({ tabName, activeTab, setActiveTab, children }) => (
-    <button
-      onClick={() => setActiveTab(tabName)}
-      className={`flex items-center justify-center px-4 py-3 font-medium text-sm transition-all duration-300 rounded-t-lg border-b-2
-        ${activeTab === tabName
-          ? 'text-blue-600 border-blue-600 bg-white'
-          : 'text-gray-500 border-transparent hover:text-blue-600 hover:border-blue-300'
-        }`}
-    >
-      {children}
-    </button>
-  );
+  const sectionTitles = { attendance: "Smart Attendance", registration: "Student & Sample Management", events: "Event Management", records: "Student Records" };
+  const sectionSubtitles = { attendance: "Take attendance using face recognition technology", registration: "Register student faces and upload handwriting samples", events: "Create events, generate passes, and scan QR codes", records: "View assignments and handwriting samples" };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto">
-        <header className="mb-8">
-          <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 text-center">
-            Teacher Dashboard
-          </h1>
-          <p className="text-center text-gray-500 mt-2">Manage attendance, registrations, events, and student records efficiently.</p>
-        </header>
-
-        {/* --- Tab Navigation --- */}
-        <div className="border-b border-gray-200 bg-gray-100 rounded-t-xl p-2 flex space-x-2 overflow-x-auto">
-          <TabButton tabName="attendance" activeTab={activeTab} setActiveTab={setActiveTab}>
-            <CalendarIcon /> Attendance
-          </TabButton>
-          <TabButton tabName="registration" activeTab={activeTab} setActiveTab={setActiveTab}>
-            <UserAddIcon /> Registration & Uploads
-          </TabButton>
-          <TabButton tabName="events" activeTab={activeTab} setActiveTab={setActiveTab}>
-            <EventIcon /> Events & Passes
-          </TabButton>
-          <TabButton tabName="records" activeTab={activeTab} setActiveTab={setActiveTab}>
-            <CollectionIcon /> Student Records
-          </TabButton>
-        </div>
-
-        {/* --- Main Content Area --- */}
-        <main className="bg-white rounded-b-xl shadow-lg border border-gray-200 p-6">
-          {activeTab === 'attendance' && (
-            <ClassAttendanceModule token={token} apiUrl={FACE_API_URL} />
+    <DashboardLayout
+      role="teacher"
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      title={sectionTitles[activeTab]}
+      subtitle={sectionSubtitles[activeTab]}
+    >
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+        >
+          {activeTab === "attendance" && (
+            <div className="card p-6 lg:p-8">
+              <ClassAttendanceModule token={token} apiUrl={FACE_API_URL} />
+            </div>
           )}
 
-          {activeTab === 'registration' && (
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">Student & Sample Management</h2>
-              {/* --- Grid Layout for Forms --- */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
-                  <FaceRegistrationModule token={token} apiUrl={FACE_API_URL} />
+          {activeTab === "registration" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="card p-6">
+                <div className="flex items-center gap-3 mb-5 pb-4 border-b border-slate-100">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900"><GradientText colors={["#6366f1", "#8b5cf6", "#6366f1"]} animationSpeed={4}>Face Registration</GradientText></h3>
+                    <p className="text-xs text-slate-500">Register student faces for attendance</p>
+                  </div>
                 </div>
-                <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
-                  <FileUploadForm onUpload={handleUpload} isLoading={isUploading} />
+                <FaceRegistrationModule token={token} apiUrl={FACE_API_URL} />
+              </div>
+              <div className="card p-6">
+                <div className="flex items-center gap-3 mb-5 pb-4 border-b border-slate-100">
+                  <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900"><GradientText colors={["#8b5cf6", "#a78bfa", "#8b5cf6"]} animationSpeed={4}>Upload Samples</GradientText></h3>
+                    <p className="text-xs text-slate-500">Upload handwriting samples for verification</p>
+                  </div>
                 </div>
+                <FileUploadForm onUpload={handleUpload} isLoading={isUploading} />
               </div>
             </div>
           )}
 
-          {activeTab === 'events' && (
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">Event Management</h2>
-              <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
-                <EventManager token={token} apiUrl={EVENT_API_URL} />
-              </div>
+          {activeTab === "events" && (
+            <div className="card p-6 lg:p-8">
+              <EventManager token={token} apiUrl={EVENT_API_URL} />
             </div>
           )}
 
-          {activeTab === 'records' && (
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">Student Records & Assignments</h2>
-              <div className="mb-6">
-                <input
-                  type="text"
-                  placeholder="Search by student name..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 shadow-sm"
-                />
+          {activeTab === "records" && (
+            <div className="space-y-6">
+              <div className="card p-4">
+                <div className="relative">
+                  <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search students by name or ID..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm placeholder:text-slate-400"
+                  />
+                </div>
               </div>
-              <div className="space-y-8">
+              <div className="card p-6">
+                <h3 className="text-base font-semibold text-slate-900"><GradientText colors={["#6366f1", "#8b5cf6", "#6366f1"]} animationSpeed={4}>Assignments</GradientText></h3>
                 <AssignmentsTable
                   data={assignments}
                   isLoading={isLoading}
-                  API_BASE_URL={API_BASE_URL}
+                  API_BASE_URL={FILES_API_URL}
                   searchTerm={searchTerm}
                   handleEvaluate={handleEvaluate}
                 />
+              </div>
+              <div className="card p-6">
+                <h3 className="text-base font-semibold text-slate-900"><GradientText colors={["#06b6d4", "#3b82f6", "#06b6d4"]} animationSpeed={4}>Handwriting Samples</GradientText></h3>
                 <HandwritingSamplesTable
                   data={handwritingSamples}
                   isLoading={isLoading}
-                  API_BASE_URL={API_BASE_URL}
+                  API_BASE_URL={FILES_API_URL}
                   searchTerm={searchTerm}
                 />
               </div>
             </div>
           )}
-        </main>
-      </div>
-      <ToastContainer position="top-right" autoClose={3000} theme="colored" />
-    </div>
+        </motion.div>
+      </AnimatePresence>
+    </DashboardLayout>
   );
 };
 

@@ -1,42 +1,19 @@
 const express = require('express');
-const {
-  addBook,
-  getAllBooks,
-  getBookById,
-  updateBook,
-  deleteBook,
-  issueBook,
-  returnBook,
-  getTransactions,
-  getLibraryStats,
-  getStudents,
-  getStudentBooks // Add this import
-} = require('../controllers/libraryController');
-const {authMiddleware} = require('../middleware/authMiddleware');
-
+const { addBook, getAllBooks, getBookById, updateBook, deleteBook, issueBook, returnBook, getTransactions, getLibraryStats, getStudents, getStudentById, getStudentBooks } = require('../controllers/libraryController');
+const { authMiddleware } = require('../middleware/authMiddleware');
+const { requireRole } = require('../middleware/roleMiddleware');
 const router = express.Router();
-
-// All routes require authentication
 router.use(authMiddleware);
-
-// Book management routes
-router.post('/books', addBook);
+router.post('/books', requireRole('librarian'), addBook);
 router.get('/books', getAllBooks);
 router.get('/books/:id', getBookById);
-router.put('/books/:id', updateBook);
-router.delete('/books/:id', deleteBook);
-
-// Book transaction routes
-router.post('/issue', issueBook);
-router.post('/return', returnBook);
-router.get('/transactions', getTransactions);
-
-// Student routes
-router.get('/students', getStudents); // Use the controller
-
-// Statistics route
-router.get('/stats', getLibraryStats);
-
-router.get('/student/my-books', getStudentBooks);
-
+router.put('/books/:id', requireRole('librarian'), updateBook);
+router.delete('/books/:id', requireRole('librarian'), deleteBook);
+router.post('/issue', requireRole('librarian'), issueBook);
+router.post('/return', requireRole('librarian'), returnBook);
+router.get('/transactions', requireRole('librarian'), getTransactions);
+router.get('/students', requireRole('librarian'), getStudents);
+router.get('/students/:id', requireRole('librarian'), getStudentById);
+router.get('/stats', requireRole('librarian'), getLibraryStats);
+router.get('/student/my-books', requireRole('student'), getStudentBooks);
 module.exports = router;

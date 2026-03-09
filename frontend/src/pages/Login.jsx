@@ -1,195 +1,254 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { motion } from "framer-motion";
+import { API_BASE_URL } from "../config";
+import { useAuth } from "../context/AuthContext";
+import {
+  GraduationCap, Mail, Lock, Eye, EyeOff, AlertCircle,
+  Loader2, ArrowLeft, ScanFace, PenTool, BookOpen, Ticket,
+} from "lucide-react";
+import { GradientText, BlurText } from "../components/reactbits";
+
+const toastConfig = {
+  position: "top-right",
+  autoClose: 2000,
+  hideProgressBar: false,
+  closeOnClick: true,
+  pauseOnHover: true,
+  draggable: true,
+};
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+  const { login } = useAuth();
+  const navTimerRef = useRef(null);
 
-  const toastConfig = {
-    position: "top-right",
-    autoClose: 2000,
-    hideProgressBar: false,
-    closeOnClick: true,
-    pauseOnHover: true,
-    draggable: true,
-  };
+  useEffect(() => {
+    return () => {
+      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+    };
+  }, []);
 
-  const handleLogin = async () => {
+  const handleLogin = async (e) => {
+    if (e) e.preventDefault();
     if (!email || !password) {
       toast.error("Please enter both email and password", toastConfig);
       return;
     }
-
     setLoading(true);
     setError(null);
-
     try {
-      const response = await axios.post("http://localhost:5000/api/auth/login", {
-        email,
-        password,
-      });
-
+      const response = await axios.post(`${API_BASE_URL}/api/auth/login`, { email, password });
       const { token, user, student } = response.data;
-
       if (!token) {
         toast.error("Authentication failed. Please try again.", toastConfig);
         return;
       }
-
-      // Store ALL user data including student details
-      sessionStorage.setItem("authToken", token);
-      sessionStorage.setItem("user", JSON.stringify(user));
-      sessionStorage.setItem("student", JSON.stringify(student));
-
-      console.log("Login successful - User:", user);
-      console.log("Student data:", student);
-
-      // Show warning if student profile is missing
+      login(token, user, student);
       if (user.role === "student" && !student) {
-        console.warn("Student profile not found for user:", user._id);
         toast.warning("Student profile not found. Please contact support.", {
           ...toastConfig,
-          autoClose: 4000
+          autoClose: 4000,
         });
       }
-
       toast.success("Login successful!", toastConfig);
-
-      setTimeout(() => {
-        // Updated role-based redirection with librarian
-        if (user.role === "teacher") {
-          navigate("/teacher-dashboard");
-        } else if (user.role === "librarian") {
-          navigate("/librarian-dashboard");
-        } else {
-          navigate("/upload");
-        }
+      navTimerRef.current = setTimeout(() => {
+        if (user.role === "admin") navigate("/admin-dashboard");
+        else if (user.role === "teacher") navigate("/teacher-dashboard");
+        else if (user.role === "librarian") navigate("/librarian-dashboard");
+        else navigate("/upload");
       }, 1000);
-
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || "Login failed";
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || "Login failed";
+      const isPending = err.response?.data?.pending;
       setError(errorMessage);
-      toast.error(errorMessage, toastConfig);
+      if (isPending) {
+        toast.info(errorMessage, { ...toastConfig, autoClose: 5000 });
+      } else {
+        toast.error(errorMessage, toastConfig);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      handleLogin();
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.3 }}
-        className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100"
-      >
-        <div className="text-center mb-8">
+    <div className="min-h-screen flex">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+        <div className="absolute inset-0 animated-gradient" />
+        <div
+          className="absolute inset-0 opacity-10"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }}
+        />
+        <div className="relative z-10 flex flex-col items-center justify-center w-full p-12 text-white">
           <motion.div
-            whileHover={{ rotate: 5 }}
-            className="inline-block mb-4"
-          >
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
-              </svg>
-            </div>
-          </motion.div>
-          <h2 className="text-3xl font-bold text-gray-800">Welcome Back</h2>
-          <p className="text-gray-500 mt-2">Please enter your credentials</p>
-        </div>
-
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm"
+            transition={{ duration: 0.8 }}
+            className="text-center"
           >
-            {error}
+            <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-8">
+              <GraduationCap className="w-10 h-10 text-white" />
+            </div>
+            <h2 className="text-4xl font-bold mb-4">
+              <GradientText
+                colors={["#ffffff", "#c7d2fe", "#a5b4fc", "#ffffff"]}
+                animationSpeed={4}
+              >
+                EduTrack
+              </GradientText>
+            </h2>
+            <p className="text-lg text-white/80 max-w-sm">
+              Smart Attendance, AI Handwriting Verification & Library Management — all in one place.
+            </p>
           </motion.div>
-        )}
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <motion.div whileHover={{ scale: 1.01 }}>
-              <input
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-              />
-            </motion.div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <motion.div whileHover={{ scale: 1.01 }}>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-              />
-            </motion.div>
-          </div>
-
-          <motion.button
-            onClick={handleLogin}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className={`w-full py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
-              loading ? "bg-gray-400" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-            } text-white shadow-md transition-all duration-300`}
-            disabled={loading}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5, duration: 0.8 }}
+            className="mt-12 grid grid-cols-2 gap-4 w-full max-w-sm"
           >
-            {loading ? (
-              <>
-                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Signing in...
-              </>
-            ) : (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                </svg>
-                Sign In
-              </>
-            )}
-          </motion.button>
+            {[
+              { icon: ScanFace, text: "Face Attendance" },
+              { icon: PenTool, text: "Handwriting AI" },
+              { icon: BookOpen, text: "Library System" },
+              { icon: Ticket, text: "Event Passes" },
+            ].map((item, i) => (
+              <div key={i} className="flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3">
+                <item.icon className="w-5 h-5 text-white/90" />
+                <span className="text-sm font-medium text-white/90">{item.text}</span>
+              </div>
+            ))}
+          </motion.div>
         </div>
+      </div>
 
-        <div className="mt-6 text-center">
-          <p className="text-gray-600">
-            Don&apos;t have an account?{" "}
-            <motion.span
-              whileHover={{ scale: 1.05 }}
-              onClick={() => navigate("/signup")}
-              className="text-blue-600 font-medium cursor-pointer hover:underline"
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 bg-slate-50">
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5 }}
+          className="w-full max-w-md"
+        >
+          <div className="lg:hidden text-center mb-8">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center mx-auto mb-3">
+              <GraduationCap className="w-6 h-6 text-white" />
+            </div>
+          </div>
+          <div className="mb-8">
+            <BlurText
+              text="Welcome back"
+              className="text-3xl font-bold text-slate-900"
+              delay={100}
+              animateBy="words"
+            />
+            <p className="text-slate-600 mt-2">Enter your credentials to access your account</p>
+          </div>
+
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-3 bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl mb-6 text-sm"
             >
-              Sign up
-            </motion.span>
-          </p>
-        </div>
-      </motion.div>
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              {error}
+            </motion.div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-5" autoComplete="on" noValidate>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Email address</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Mail className="w-5 h-5 text-slate-400" />
+                </div>
+                <input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 text-slate-900 placeholder:text-slate-400 outline-none"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Password</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Lock className="w-5 h-5 text-slate-400" />
+                </div>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="w-full pl-12 pr-12 py-3.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 text-slate-900 placeholder:text-slate-400 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+            <motion.button
+              type="submit"
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className={`w-full py-4 rounded-xl font-semibold flex items-center justify-center gap-2 text-white shadow-lg transition-all duration-300 ${
+                loading
+                  ? "bg-slate-400 cursor-not-allowed"
+                  : "bg-gradient-to-r from-indigo-600 to-violet-600 hover:shadow-xl hover:from-indigo-700 hover:to-violet-700"
+              }`}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign In"
+              )}
+            </motion.button>
+          </form>
+
+          <div className="mt-8 text-center">
+            <p className="text-slate-600">
+              Don&apos;t have an account?{" "}
+              <Link
+                to="/signup"
+                className="font-semibold text-indigo-600 hover:text-indigo-700 transition-colors"
+              >
+                Create one
+              </Link>
+            </p>
+          </div>
+          <div className="mt-6 text-center">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to home
+            </Link>
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
 };

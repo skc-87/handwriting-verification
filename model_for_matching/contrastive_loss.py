@@ -9,6 +9,5 @@ class ContrastiveLoss(nn.Module):
 
     def forward(self, output1, output2, label):
         distance = F.pairwise_distance(output1, output2)
-        loss = (label) * torch.pow(distance, 2) + \
-               (1 - label) * torch.pow(torch.clamp(self.margin - distance, min=0.0), 2)
+        loss = (label) * torch.pow(distance, 2) + (1 - label) * torch.pow(torch.clamp(self.margin - distance, min=0.0), 2)
         return loss.mean()

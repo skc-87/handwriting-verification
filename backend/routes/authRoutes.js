@@ -3,129 +3,105 @@ const User = require("../models/User");
 const Student = require("../models/Student");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
+const rateLimit = require("express-rate-limit");
 const router = express.Router();
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
+  message: { message: "Too many attempts, please try again later." },
+});
+const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const VALID_ROLES = ["student", "teacher", "librarian"];
 
-
-// Generate JWT Token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
-};
-
-// Register User (Student/Teacher) with Transactions
-router.post("/register", async (req, res) => {
+router.post("/register", authLimiter, async (req, res) => {
   const { name, email, password, role, mobile_number, department, year } = req.body;
-
-  // Start MongoDB session for transaction
+  if (!name || !email || !password || !role) {
+    return res.status(400).json({ message: "Name, email, password, and role are required" });
+  }
+  if (typeof name !== "string" || typeof email !== "string" || typeof password !== "string" || typeof role !== "string") {
+    return res.status(400).json({ message: "Invalid input types" });
+  }
+  if (!isValidEmail(email)) return res.status(400).json({ message: "Invalid email format" });
+  if (password.length < 8) return res.status(400).json({ message: "Password must be at least 8 characters" });
+  if (password.length > 72) return res.status(400).json({ message: "Password must not exceed 72 characters" });
+  if (!VALID_ROLES.includes(role)) return res.status(400).json({ message: "Invalid role" });
+  const status = role === "student" ? "approved" : "pending";
   const session = await mongoose.startSession();
-  
   try {
     session.startTransaction();
-
-    // Check if user exists
     const userExists = await User.findOne({ email }).session(session);
     if (userExists) {
-      await session.abortTransaction();
-      session.endSession();
+      await session.abortTransaction(); session.endSession();
       return res.status(400).json({ message: "User already exists" });
     }
-
-    // Create User
-    const user = await User.create([{ name, email, password, role }], { session });
-
+    const user = await User.create([{ name, email, password, role, status }], { session });
     let studentProfile = null;
-    
     if (role === "student") {
-      // Validate student fields
       if (!mobile_number || !department || !year) {
-        await session.abortTransaction();
-        session.endSession();
-        return res.status(400).json({ 
-          message: "All student fields (mobile_number, department, year) are required" 
-        });
+        await session.abortTransaction(); session.endSession();
+        return res.status(400).json({ message: "All student fields (mobile_number, department, year) are required" });
       }
-
-      // Create Student Profile
       studentProfile = await Student.create([{
-        user: user[0]._id,
-        mobile_number,
-        department,
-        year: Number(year),
+        user: user[0]._id, mobile_number, department, year: Number(year),
       }], { session });
     }
-
-    // Commit transaction
     await session.commitTransaction();
     session.endSession();
-
+    const userResponse = {
+      _id: user[0]._id, name: user[0].name, email: user[0].email,
+      role: user[0].role, status: user[0].status,
+    };
+    if (status === "pending") {
+      return res.status(201).json({
+        message: "Registration submitted! Your account is pending admin approval. You will be able to login once approved.",
+        user: userResponse, pending: true,
+      });
+    }
     res.status(201).json({
-      message: "User registered successfully",
-      user: user[0],
-      student: studentProfile ? studentProfile[0] : null,
-      token: generateToken(user[0]._id)
+      message: "User registered successfully", user: userResponse,
+      student: studentProfile ? studentProfile[0] : null, token: generateToken(user[0]._id),
     });
-
   } catch (error) {
-    // Abort transaction on any error
-    await session.abortTransaction();
-    session.endSession();
-    
+    try { await session.abortTransaction(); }
+    catch (abortErr) { console.error("Session abort error:", abortErr.message); }
+    finally { session.endSession(); }
     console.error("Registration error:", error.message);
-    
-    res.status(500).json({ 
-      message: "Server error during registration",
-      error: error.message 
-    });
+    res.status(500).json({ message: "Server error during registration" });
   }
 });
 
-// Login User (Student/Teacher)
-router.post("/login", async (req, res) => {
+router.post("/login", authLimiter, async (req, res) => {
   const { email, password } = req.body;
-
+  if (!email || !password) return res.status(400).json({ message: "Email and password are required" });
+  if (typeof email !== "string" || typeof password !== "string") return res.status(400).json({ message: "Invalid input" });
   try {
-    // Find user by email
     const user = await User.findOne({ email });
-
-    if (!user) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
-
-    // Check password
+    if (!user) return res.status(401).json({ message: "Invalid credentials" });
     const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" });
+    if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
+    if (user.status === "pending") {
+      return res.status(403).json({
+        message: "Your account is pending admin approval. Please wait for approval before logging in.",
+        pending: true
+      });
     }
-
-    // Fetch student profile if user is student
+    if (user.status === "rejected") {
+      return res.status(403).json({
+        message: "Your registration request was rejected. Please contact the administrator for more information."
+      });
+    }
     let studentProfile = null;
-    if (user.role === "student") {
-      studentProfile = await Student.findOne({ user: user._id });
-    }
-
-    // Remove password from user object in response
+    if (user.role === "student") studentProfile = await Student.findOne({ user: user._id });
     const userResponse = {
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt
+      _id: user._id, name: user.name, email: user.email, role: user.role,
+      status: user.status, createdAt: user.createdAt, updatedAt: user.updatedAt
     };
-
     res.json({
-      message: "Login Successful",
-      user: userResponse,
-      student: studentProfile,
-      token: generateToken(user._id),
+      message: "Login Successful", user: userResponse,
+      student: studentProfile, token: generateToken(user._id),
     });
-
   } catch (error) {
-    console.error("Login error:", error.message);
-    
-    res.status(500).json({ 
-      message: "Server error during login",
-      error: error.message 
-    });
+    res.status(500).json({ message: "Server error during login" });
   }
 });
 
